@@ -1,2238 +1,1537 @@
-<html lang="fr"><head><script type='text/javascript' nonce='V7tyvnxE6Xs0OPYOzQkKbw==' src='https://mathsxp.odoo.com/uuoxbd0SdT8RjvBJrEiewc4tqo_br1-yqo3oitGb0tbJFlgVw1Duo6EF4MFPBVnDE9xSQITJJr9N_OMCc-N0KH1VhmBeH_LNToRVf54-drn5fUDqutrxQJPtSSxJDgSWvEIgtrz8plLtf8hzlJXm57dVkgFEbRMLY6pwdvmFe0JhyLr6Yd8DDdn_PPJYrhbOmYa5le10YclHfFVrMhb2PfLWEoCQ2UP1oVpcFdowAKPNkwIiZ2V3H5s6kWzOVNaXmEnVD6cc9oNqcN177uqTWpcK8BPgiUHg_4D7p-hTk4PUaTh9_dvNEv9ECT-hbb0CRHzOEBNhVPOi86oj6J0hczQc4561_aHXkXquZRlhU7bEU3q6-vTk-H7cKu5IsZulqcRE_HkTpkeOFZEJ2N4kBJlee-bPoyYQ5_io3Y8vFUnu0RbDeU6fQ7tqSInf9HHeLIpR6Zqjj3qJNudO6fHiaL2z7hViDwJe3pYfYjbq2TovuTVlK1cHKYDr6MyjB89A44JzPP6SMeaPdzFvRBAy6j7ovfEMSn4_qcWPjCRLyMINQxfT14keTA'></script>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Maths Snake</title>
-  <style>
-    :root{ --bg:#f6f7fb; --card:#fff; --shadow:0 12px 32px rgba(0,0,0,.12); --radius:18px; }
-    html, body{ height:100%; }
-    body{
-      margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background: var(--bg);
-      display:flex; align-items:center; justify-content:center;
-    }
-    #wrap{
-      width:min(1400px, 98vw);
-      height:min(96vh, 1200px);
-      background: var(--card);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      overflow:hidden;
-      position:relative;
-    }
-    canvas{
-      width:100%;
-      height:100%;
-      display:block;
-      touch-action:none;
-      cursor:default;
-      image-rendering:auto;
-    }
-  </style>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Maths Snake</title>
+<!-- Auteur : Tom Rougeaud — Licence CC BY-NC 4.0 — Fichier autonome, sans dépendance externe, aucune donnée collectée -->
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;background:#dfe7fb;font-family:ui-rounded,"Nunito","Segoe UI",system-ui,sans-serif}
+  body{display:flex;align-items:center;justify-content:center;background:#dfe7fb}
+  #card{position:relative;width:min(1400px,98vw);height:min(96vh,1200px);height:min(96dvh,1200px);background:#fff;border-radius:22px;box-shadow:0 12px 40px rgba(40,60,120,.28);overflow:hidden}
+  canvas{display:block;width:100%;height:100%;touch-action:none;outline:none;-webkit-tap-highlight-color:transparent}
+  #cap{position:absolute;left:-9999px;top:0;width:1px;height:1px;opacity:0;border:0;padding:0}
+</style>
 </head>
 <body>
-  <div id="wrap"><canvas id="game" width="1400" height="1036"></canvas></div>
-
-<script>
-(() => {
-  // ============================
-  // Canvas + DPR
-  // ============================
-  const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d", { alpha:false });
-
-  let DPR=1, W=0, H=0;
-
-  function resize(){
-    const r = canvas.getBoundingClientRect();
-    DPR = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-    W = Math.max(420, Math.floor(r.width * DPR));
-    H = Math.max(420, Math.floor(r.height * DPR));
-    canvas.width = W;
-    canvas.height = H;
-    recalcLayout();
-    buildFixedObstacles();
-  }
-  window.addEventListener("resize", resize);
-
-  // ============================
-  // Helpers
-  // ============================
-  const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-  const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
-  const fmt=(n)=>{
-    if(typeof n!=="number"||!isFinite(n)) return String(n);
-    if(Number.isInteger(n)) return String(n);
-    return (Math.round(n*100)/100).toFixed(2).replace(/\.?0+$/,"");
-  };
-  const eqNum=(a,b)=>Math.abs(a-b)<1e-9;
-
-  function pad2(x){ return String(x).padStart(2,"0"); }
-  function nowStampFR(){
-    const d=new Date();
-    return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-  }
-  function escapeCSV(s){
-    const str=String(s??"");
-    if(/[;"\n]/.test(str)) return `"${str.replace(/"/g,'""')}"`;
-    return str;
-  }
-  function safeFileName(s){ return String(s).replace(/[^\w\-\.]+/g,"_"); }
-  function downloadBlob(text,mime,filename){
-    const blob=new Blob([text],{type:mime});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url; a.download=filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  // ============================
-  // Audio (WebAudio, sans fichiers)
-  // ============================
-  let audioCtx=null;
-  function ensureAudio(){
-    if(audioCtx) return;
-    const AC=window.AudioContext||window.webkitAudioContext;
-    if(!AC) return;
-    audioCtx=new AC();
-  }
-  function beep(freq=880,dur=0.08,type="sine",gain=0.06){
-    if(!audioCtx) return;
-    const t0=audioCtx.currentTime;
-    const osc=audioCtx.createOscillator();
-    const g=audioCtx.createGain();
-    osc.type=type;
-    osc.frequency.setValueAtTime(freq,t0);
-    g.gain.setValueAtTime(gain,t0);
-    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
-    osc.connect(g); g.connect(audioCtx.destination);
-    osc.start(t0); osc.stop(t0+dur+0.02);
-  }
-  function sfxBon(){ beep(880,0.07,"sine",0.07); beep(1175,0.08,"sine",0.06); }
-  function sfxFaux(){ beep(220,0.12,"square",0.05); beep(170,0.14,"square",0.05); }
-
-  // ============================
-  // UI (Canvas only) + hit test
-  // ============================
-  let ui=[];
-  function clearUI(){ ui=[]; }
-  function addUI(e){ ui.push(e); }
-  function hit(px,py){
-    for(let i=ui.length-1;i>=0;i--){
-      const e=ui[i];
-      if(px>=e.x&&px<=e.x+e.w&&py>=e.y&&py<=e.y+e.h) return e;
-    }
-    return null;
-  }
-  function roundRect(x,y,w,h,r){
-    const rr=Math.min(r,w/2,h/2);
-    ctx.beginPath();
-    ctx.moveTo(x+rr,y);
-    ctx.arcTo(x+w,y,x+w,y+h,rr);
-    ctx.arcTo(x+w,y+h,x,y+h,rr);
-    ctx.arcTo(x,y+h,x,y,rr);
-    ctx.arcTo(x,y,x+w,y,rr);
-    ctx.closePath();
-  }
-  function drawCard(x,y,w,h,alpha=0.92){
-    ctx.save();
-    ctx.globalAlpha=alpha;
-    ctx.fillStyle="rgba(255,255,255,0.92)";
-    ctx.strokeStyle="rgba(0,0,0,0.10)";
-    ctx.lineWidth=2;
-    roundRect(x,y,w,h,16*DPR);
-    ctx.fill(); ctx.stroke();
-    ctx.restore();
-  }
-  function drawButton(id,x,y,w,h,label,opt={}){
-    const {primary=false,disabled=false,alpha=0.72}=opt;
-    ctx.save();
-    ctx.globalAlpha=disabled?alpha*0.55:alpha;
-    ctx.fillStyle=primary?"rgba(17,17,17,0.92)":"rgba(255,255,255,0.90)";
-    ctx.strokeStyle=primary?"rgba(17,17,17,0.92)":"rgba(0,0,0,0.14)";
-    ctx.lineWidth=2;
-    roundRect(x,y,w,h,14*DPR);
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle=primary?"#fff":"#111";
-    ctx.font=`900 ${Math.floor(14*DPR)}px system-ui`;
-    ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText(label,x+w/2,y+h/2);
-    ctx.restore();
-    addUI({id,type:"button",x,y,w,h,disabled});
-  }
-  function drawSlider(id,x,y,w,h,label,value01,leftLabel,rightLabel,opt={}){
-    const {alpha=0.90}=opt;
-    ctx.save();
-    ctx.globalAlpha=alpha;
-    ctx.fillStyle="rgba(255,255,255,0.90)";
-    ctx.strokeStyle="rgba(0,0,0,0.14)";
-    ctx.lineWidth=2;
-    roundRect(x,y,w,h,14*DPR);
-    ctx.fill(); ctx.stroke();
-
-    const pad=12*DPR;
-    ctx.fillStyle="#111";
-    ctx.font=`900 ${Math.floor(13*DPR)}px system-ui`;
-    ctx.textAlign="left"; ctx.textBaseline="top";
-    ctx.fillText(label,x+pad,y+8*DPR);
-
-    const railX=x+pad, railY=y+34*DPR, railW=w-2*pad, railH=8*DPR;
-    ctx.fillStyle="rgba(0,0,0,0.10)";
-    roundRect(railX,railY,railW,railH,999); ctx.fill();
-
-    const kx=railX+value01*railW, ky=railY+railH/2;
-    ctx.fillStyle="rgba(17,17,17,0.92)";
-    ctx.beginPath(); ctx.arc(kx,ky,10*DPR,0,Math.PI*2); ctx.fill();
-
-    ctx.fillStyle="rgba(0,0,0,0.60)";
-    ctx.font=`800 ${Math.floor(11*DPR)}px system-ui`;
-    ctx.textBaseline="bottom";
-    ctx.textAlign="left";
-    if(leftLabel) ctx.fillText(leftLabel,railX,y+h-8*DPR);
-    ctx.textAlign="right";
-    if(rightLabel) ctx.fillText(rightLabel,railX+railW,y+h-8*DPR);
-
-    ctx.restore();
-    addUI({id,type:"slider",x,y,w,h,value01});
-  }
-  function drawTextInput(id,x,y,w,h,label,value,focused,opt={}){
-    const {alpha=0.90}=opt;
-    ctx.save();
-    ctx.globalAlpha=alpha;
-    ctx.fillStyle="rgba(255,255,255,0.90)";
-    ctx.strokeStyle=focused?"rgba(17,17,17,0.70)":"rgba(0,0,0,0.14)";
-    ctx.lineWidth=2;
-    roundRect(x,y,w,h,14*DPR);
-    ctx.fill(); ctx.stroke();
-
-    const pad=12*DPR;
-    ctx.fillStyle="rgba(0,0,0,0.65)";
-    ctx.font=`900 ${Math.floor(12*DPR)}px system-ui`;
-    ctx.textAlign="left"; ctx.textBaseline="top";
-    ctx.fillText(label,x+pad,y+8*DPR);
-
-    ctx.fillStyle="#111";
-    ctx.font=`900 ${Math.floor(16*DPR)}px system-ui`;
-    ctx.textBaseline="top";
-    const show=value.length?value:"…";
-    ctx.globalAlpha=value.length?alpha:alpha*0.45;
-    ctx.fillText(show,x+pad,y+28*DPR);
-    ctx.globalAlpha=alpha;
-
-    if(focused){
-      const blink=(Math.floor(Date.now()/450)%2)===0;
-      if(blink){
-        const m=ctx.measureText(value);
-        const cx=x+pad+m.width+2*DPR;
-        const cy=y+28*DPR;
-        ctx.strokeStyle="rgba(17,17,17,0.90)";
-        ctx.lineWidth=2;
-        ctx.beginPath();
-        ctx.moveTo(cx,cy+2*DPR);
-        ctx.lineTo(cx,cy+18*DPR);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-    addUI({id,type:"input",x,y,w,h});
-  }
-
-  // ============================
-  // Layout zones
-  // ============================
-  let CELL=24, COLS=24, ROWS=24;
-  let topBarH=0;        // interface “hors salle” AU-DESSUS du tableau
-  let boardH=0;         // tableau (zone question)
-  let marginEdge=0;     // 15%
-  let playTopY=0;       // zone parquet autorisée (sous tableau)
-  let boardCells=0;
-
-  let boardRect = {x:0,y:0,w:0,h:0};
-
-  function recalcLayout(){
-    CELL=clamp(Math.floor(Math.min(W,H)/30),18,34);
-    COLS=Math.floor(W/CELL);
-    ROWS=Math.floor(H/CELL);
-
-    topBarH=Math.floor(H*0.10);   // zone UI hors salle
-    boardH=Math.floor(H*0.16);    // hauteur “réservée” au tableau
-    marginEdge=Math.floor(Math.min(W,H)*0.15);
-
-    playTopY=topBarH+boardH;
-    boardCells=Math.ceil((topBarH+boardH)/CELL);
-  }
-
-  // ============================
-  // Screens
-  // ============================
-  const SC={MENU1:"MENU1",MENU2:"MENU2",PLAY:"PLAY",PAUSE:"PAUSE",FIN:"FIN",CRASH:"CRASH"};
-  let screen=SC.MENU1;
-  let crashMsg="";
-
-  // ============================
-  // Chapitres (checkbox)
-  // ============================
-  const CHAPS=[
-    {key:"EQUATION", label:"Équations"},
-    {key:"POURCENTAGES", label:"Pourcentages"},
-    {key:"CALCUL_MENTAL", label:"Calcul mental"},
-    {key:"CONVERSIONS", label:"Conversions"},
-    {key:"CARRE", label:"Carrés / Racines"},
-  ];
-  let chapEnabled = new Map(CHAPS.map(c=>[c.key,true])); // défaut : tous cochés
-
-  function enabledChaptersList(){
-    const a=[];
-    for(const c of CHAPS) if(chapEnabled.get(c.key)) a.push(c.key);
-    // sécurité : au moins 1
-    if(a.length===0) a.push("CALCUL_MENTAL");
-    return a;
-  }
-
-  function pickChap(){
-    const a=enabledChaptersList();
-    return a[randInt(0,a.length-1)];
-  }
-
-  // ============================
-  // Settings
-  // ============================
-  let studentName="";
-  let studentClass="";
-  let focusedInput=null;
-
-  // Chrono 20..60 (défaut 30)
-  let chrono01= (30-20)/(60-20);
-
-  // Difficulté 1..5 (défaut 1) — auto +1 toutes les 5 bonnes réponses
-  let diffLevel=1;
-  let diff01=0;
-
-  // Vitesse 350..20ms (défaut 150)
-  let speed01 = (350-150)/(350-20);
-
-  // Vies (on garde 3 fixes pour simplicité + robustesse)
-  let livesFixed=3;
-
-  // Fullscreen at start
-  let autoFullscreen=true;
-
-  // Best score global (affiché en HUD)
-  const BEST_KEY="maths_snake_best_global";
-  function bestScore(){ return Number(localStorage.getItem(BEST_KEY)||0); }
-  function setBest(v){ localStorage.setItem(BEST_KEY, String(v)); }
-
-  function sliderToChrono(v01){ return Math.round(20 + v01*(60-20)); }
-  function sliderToDiff(v01){ return clamp(1 + Math.round(v01*4), 1, 5); }
-  function sliderToTickMs(v01){
-    // left slow(350) -> right fast(20)
-    const slow=350, fast=20;
-    return Math.round(slow - v01*(slow-fast));
-  }
-
-  function getChrono(){ return sliderToChrono(chrono01); }
-  function getDiff(){ return diffLevel; }
-  function getTickManual(){ return sliderToTickMs(speed01); }
-
-  // ============================
-  // Obstacles: interdit haut + tables + meubles + prof
-  // ============================
-  let obstacles=[]; // {kind,x,y,w,h} in cells
-  let prof=null;
-
-  function buildFixedObstacles(){
-    obstacles=[];
-
-    // zone interdite topbar+tableau
-    obstacles.push({kind:"interdit_haut", x:0, y:0, w:COLS, h:boardCells});
-
-    // meubles verticaux (bords extérieurs)
-    const edgeW = clamp(Math.floor(COLS*0.06), 2, 4);
-    const topSafe = boardCells + 2;
-    const bottomSafe = ROWS - 1 - Math.ceil(marginEdge/CELL);
-
-    // gauche
-    obstacles.push({kind:"meuble", x:0, y:topSafe, w:edgeW, h:bottomSafe-topSafe});
-    // droite
-    obstacles.push({kind:"meuble", x:COLS-edgeW, y:topSafe, w:edgeW, h:bottomSafe-topSafe});
-
-    // 9 tables (3x3) un peu plus écartées
-    const leftMarginCell = Math.ceil(marginEdge / CELL) + edgeW;
-    const rightMarginCell = COLS - 1 - Math.ceil(marginEdge / CELL) - edgeW;
-
-    const topAllowedCell = Math.max(boardCells + 2, Math.ceil(marginEdge/CELL));
-    const bottomAllowedCell = ROWS - 1 - Math.ceil(marginEdge/CELL);
-
-    const usableLeft = leftMarginCell;
-    const usableRight = rightMarginCell;
-    const usableTop = topAllowedCell;
-    const usableBottom = bottomAllowedCell;
-
-    const cols=3, rows=3;
-
-    const tableW = clamp(Math.floor(COLS*0.16), 5, 8);
-    const tableH = clamp(Math.floor(ROWS*0.10), 3, 6);
-
-    const usableW = usableRight-usableLeft+1;
-    const usableH = usableBottom-usableTop+1;
-
-    // +1 gap compared to previous
-    const totalW = cols*tableW;
-    const gapX = Math.max(3, Math.floor((usableW - totalW)/(cols+1)));
-    const startX = usableLeft + gapX;
-
-    const totalH = rows*tableH;
-    const gapY = Math.max(3, Math.floor((usableH - totalH)/(rows+1)));
-    const startY = usableTop + gapY;
-
-    for(let r=0;r<rows;r++){
-      for(let c=0;c<cols;c++){
-        const x = startX + c*(tableW+gapX);
-        const y = startY + r*(tableH+gapY);
-        obstacles.push({kind:"table", x,y,w:tableW,h:tableH});
-      }
-    }
-
-    // Prof juste sous tableau (2x2) mais emoji 2x plus grand visuellement
-    const px = Math.floor(COLS/2) - 1;
-    const py = boardCells;
-    prof = {kind:"prof", x:px, y:py, w:2, h:2};
-    obstacles.push(prof);
-  }
-
-  function cellInObstacle(cx,cy){
-    for(const o of obstacles){
-      if(cx>=o.x && cx<o.x+o.w && cy>=o.y && cy<o.y+o.h) return true;
-    }
-    return false;
-  }
-
-  // ============================
-  // Questions
-  // ============================
-  function bandFromDiff(){
-    if(diffLevel<=2) return "easy";
-    if(diffLevel<=4) return "medium";
-    return "hard";
-  }
-  function q(text, ans, chap){ return {text, answer:ans, chap}; }
-
-  function generateQuestion(){
-    const chap = pickChap();
-    const d = bandFromDiff();
-
-    if(chap==="EQUATION"){
-      if(d==="easy"){
-        if(randInt(0,1)===0){ const x=randInt(5,60),a=randInt(5,25),b=x+a; return q(`x + ${a} = ${b}`, x, chap); }
-        const x=randInt(8,70),a=randInt(5,25),b=x-a; return q(`x - ${a} = ${b}`, x, chap);
-      }
-      if(d==="medium"){
-        const a=randInt(2,6),x=randInt(5,30),b=randInt(-20,20),c=a*x+b;
-        const bTxt=b>=0?` + ${b}`:` - ${Math.abs(b)}`;
-        return q(`${a}x${bTxt} = ${c}`, x, chap);
-      }
-      if(randInt(0,1)===0){
-        const a=randInt(2,7),x=randInt(5,40),b=randInt(-10,15),c=a*(x+b);
-        const bTxt=b>=0?` + ${b}`:` - ${Math.abs(b)}`;
-        return q(`${a}(x${bTxt}) = ${c}`, x, chap);
-      } else {
-        const k=randInt(2,8); let x=randInt(12,80); x-=x%k;
-        const b=randInt(-10,20),c=x/k+b;
-        const bTxt=b>=0?` + ${b}`:` - ${Math.abs(b)}`;
-        return q(`x / ${k}${bTxt} = ${c}`, x, chap);
-      }
-    }
-
-    if(chap==="POURCENTAGES"){
-      if(d==="easy"){
-        if(randInt(0,1)===0){
-          const p=[10,15,20,25,30,40,50][randInt(0,6)];
-          const n=randInt(2,20)*10;
-          return q(`${p}% de ${n} = ?`, (p/100)*n, chap);
-        } else {
-          const p=[5,8,10,12,15,20][randInt(0,5)];
-          const n=randInt(5,30)*10;
-          return q(`Augmentation de ${p}% sur ${n} = ?`, n*(1+p/100), chap);
-        }
-      }
-      if(d==="medium"){
-        const p=[12,15,18,20,25,30][randInt(0,5)];
-        const n=randInt(8,60)*5;
-        if(randInt(0,1)===0) return q(`Baisse de ${p}% sur ${n} = ?`, n*(1-p/100), chap);
-        return q(`Augmentation de ${p}% sur ${n} = ?`, n*(1+p/100), chap);
-      }
-      if(randInt(0,1)===0){
-        const p=[10,12,15,20,25,30][randInt(0,5)];
-        const initial=randInt(50,300);
-        const final=Math.round(initial*(1+p/100)*100)/100;
-        return q(`Après une augmentation de ${p}%, le prix devient ${fmt(final)}.\nPrix initial = ?`, initial, chap);
-      } else {
-        const A=randInt(40,250);
-        const p=[5,8,10,12,15,20,25,30][randInt(0,7)];
-        const inc=Math.random()<0.6;
-        const B=Math.round((inc?A*(1+p/100):A*(1-p/100))*100)/100;
-        const sign=inc?"augmentation":"baisse";
-        return q(`De ${A} à ${fmt(B)} :\nQuel est le % de ${sign} ?`, p, chap);
-      }
-    }
-
-    if(chap==="CALCUL_MENTAL"){
-      if(d==="easy"){
-        const a=randInt(5,80),b=randInt(5,80);
-        if(randInt(0,1)===0) return q(`${a} + ${b} = ?`, a+b, chap);
-        const A=Math.max(a,b),B=Math.min(a,b);
-        return q(`${A} - ${B} = ?`, A-B, chap);
-      }
-      if(d==="medium"){
-        const t=randInt(1,4);
-        if(t===1){ const a=randInt(6,25),b=randInt(2,12); return q(`${a} × ${b} = ?`, a*b, chap); }
-        if(t===2){ const a=randInt(10,90); return q(`Double de ${a} = ?`, 2*a, chap); }
-        if(t===3){ const a=randInt(20,120); return q(`Moitié de ${a} = ?`, a/2, chap); }
-        const a=randInt(2,9),n=randInt(2,25)*10;
-        return q(`${n} × ${a} = ?`, n*a, chap);
-      }
-      const t=randInt(1,3);
-      if(t===1){ const a=randInt(2,12),b=randInt(2,12),c=randInt(5,40); return q(`${a} × ${b} + ${c} = ?`, a*b+c, chap); }
-      if(t===2){ const b=randInt(2,6),a=randInt(6,30)*b,c=randInt(5,30); return q(`${a} ÷ ${b} + ${c} = ?`, a/b+c, chap); }
-      const a=randInt(2,10),b=randInt(2,10),c=randInt(2,10);
-      return q(`(${a} + ${b}) × ${c} = ?`, (a+b)*c, chap);
-    }
-
-    if(chap==="CONVERSIONS"){
-      if(d==="easy"){
-        const t=randInt(1,3);
-        if(t===1){ const g=randInt(2,90)*100; return q(`${g} g = ? kg`, g/1000, chap); }
-        if(t===2){ const kg=randInt(1,30); return q(`${kg} kg = ? g`, kg*1000, chap); }
-        const cm=randInt(50,900); return q(`${cm} cm = ? m`, cm/100, chap);
-      }
-      if(d==="medium"){
-        const t=randInt(1,3);
-        if(t===1){ const ml=randInt(5,95)*100; return q(`${ml} mL = ? L`, ml/1000, chap); }
-        if(t===2){ const L=randInt(1,9)+randInt(0,9)/10; return q(`${fmt(L)} L = ? mL`, Math.round(L*1000), chap); }
-        const min=randInt(30,240); return q(`${min} min = ? h`, min/60, chap);
-      }
-      const t=randInt(1,3);
-      if(t===1){ const km=randInt(1,25)+randInt(0,9)/10; return q(`${fmt(km)} km = ? m`, Math.round(km*1000), chap); }
-      if(t===2){ const m=randInt(120,4800); return q(`${m} m = ? km`, m/1000, chap); }
-      const sec=randInt(90,5400); return q(`${sec} s = ? min`, sec/60, chap);
-    }
-
-    if(chap==="CARRE"){
-      if(d==="easy"){ const n=randInt(1,15); return q(`${n}² = ?`, n*n, chap); }
-      if(d==="medium"){ const n=randInt(12,25); return q(`${n}² = ?`, n*n, chap); }
-      if(randInt(0,2)===0){ const n=randInt(20,40); return q(`${n}² = ?`, n*n, chap); }
-      const n=randInt(10,35); return q(`√${n*n} = ?`, n, chap);
-    }
-
-    return q("x + 5 = 9", 4, "CALCUL_MENTAL");
-  }
-
-  function generateChoices(qObj){
-    const a=Math.round(Number(qObj.answer)*100)/100;
-    const set=new Set();
-    const add=(v)=>set.add(Math.round(Number(v)*100)/100);
-    add(a);
-
-    const m=qObj.chap;
-    if(m==="POURCENTAGES"){ add(a+10); add(a-10); add(a*0.9); add(a*1.1); add(a*2); }
-    else if(m==="EQUATION"){ add(a+1); add(a-1); add(-a); add(a+5); }
-    else if(m==="CONVERSIONS"){ add(a*10); add(a/10); add(a*100); add(a/100); add(a*1000); add(a/1000); }
-    else if(m==="CARRE"){ add(a+2); add(a-2); const r=Math.round(Math.sqrt(Math.max(0,a))); add(r); add(r*2); }
-    else { add(a+2); add(a-2); add(a*2); add(a/2); }
-
-    while(set.size<4){
-      const jitter=(Math.random()<0.75)?randInt(-12,12):randInt(-40,40);
-      add(a+jitter);
-    }
-
-    const arr=[...set].slice(0,4);
-    for(let i=arr.length-1;i>0;i--){ const j=randInt(0,i); [arr[i],arr[j]]=[arr[j],arr[i]]; }
-    return arr;
-  }
-
-  // ============================
-  // Game state
-  // ============================
-  const NOTE="📒";
-  const PROF_EMOJI="👨‍🏫";
-
-  let snake=[];
-  let dir={x:1,y:0};
-  let nextDir={x:1,y:0};
-
-  let answers=[]; // {x,y,w,h, value, isCorrect, cx,cy, r, hit}
-  let currentQ=null;
-
-  let score=0;
-  let lives=3;
-
-  let baseTick=150;
-  let penaltyMs=0;
-  let tickMs=150;
-
-  // Chrono mandatory 20..60
-  let chronoS=30;
-  let timeLeft=30;
-  let secAcc=0;
-
-  // streak bad
-  let mauvaisesSuite=0;
-
-  // question timing
-  let qStartTime=0;
-
-  // bubble prof
-  let profBubbleTimer=0;
-  let profBubbleText="Bonne réponse !";
-  let bubbleRectPx=null;
-
-  // anti-pickup window after spawn
-  const PICKUP_IGNORE_MS = 650;
-  let answersSpawnAt = 0;
-
-  // log
-  let logRows=[];
-  let qIndex=0;
-
-  // crash watchdog: if no movement detected
-  let lastHeadCellKey="";
-  let stillFrames=0;
-
-  // cheatcodes tracking
-  let cheatBuffer="";
-  let cheat194Active=false;      // coloration bonne réponse
-  let cheatUsed=[];              // list of {code,label,time}
-  let cheatSpeedMult=1.0;        // affected by +++/---
-  let cheatGrowQueued=0;         // *** growth by 2
-  let cheatDiffBoost=0;          // *** difficulty increment
-  let correctHighlight=false;
-
-  function markCheat(code,label){
-    const t = nowStampFR();
-    cheatUsed.push({code,label,time:t});
-  }
-
-  function logAttempt({chap, niveau, question, correct, chosen, result, tempsSec, cheatFlags}){
-    logRows.push({
-      index: qIndex,
-      chapitre: chap,
-      niveau: niveau,
-      question: question,
-      bonne_reponse: fmt(correct),
-      reponse_eleve: (chosen==="timeout") ? "temps écoulé" : fmt(chosen),
-      resultat: result,
-      temps_par_question_s: fmt(tempsSec),
-      cheatcodes_actifs: cheatFlags || ""
-    });
-  }
-
-  function updateBestIfNeeded(){
-    const b=bestScore();
-    if(score>b) setBest(score);
-  }
-
-  // ============================
-  // Forbidden rects for answers placement
-  // ============================
-  function rectsOverlap(a,b){
-    return !(a.x+a.w < b.x || b.x+b.w < a.x || a.y+a.h < b.y || b.y+b.h < a.y);
-  }
-  function inflateRect(r,p){ return {x:r.x-p,y:r.y-p,w:r.w+2*p,h:r.h+2*p}; }
-  function obstacleRectsPx(){
-    const rects=[];
-    for(const o of obstacles){
-      rects.push({x:o.x*CELL,y:o.y*CELL,w:o.w*CELL,h:o.h*CELL});
-    }
-    // margins 15%
-    rects.push({x:0,y:0,w:marginEdge,h:H});
-    rects.push({x:W-marginEdge,y:0,w:marginEdge,h:H});
-    rects.push({x:0,y:0,w:W,h:marginEdge});
-    rects.push({x:0,y:H-marginEdge,w:W,h:marginEdge});
-    // bubble obstacle (si actif)
-    if(bubbleRectPx) rects.push({...bubbleRectPx});
-    return rects;
-  }
-  function uiRectsPx(){
-    const rects=[];
-    for(const e of ui){
-      if(["button","slider","input","check"].includes(e.type)){
-        rects.push({x:e.x,y:e.y,w:e.w,h:e.h});
-      }
-    }
-    return rects;
-  }
-  function snakeCentersPx(){
-    const centers=[];
-    for(const s of snake){
-      centers.push({x:s.x*CELL + CELL/2, y:s.y*CELL + CELL/2});
-    }
-    return centers;
-  }
-
-  function spawnAnswers(){
-    // hard reset (never keep stale)
-    answers=[];
-    cheat194Active = cheat194Active; // keep
-    correctHighlight = cheat194Active;
-
-    const choices=generateChoices(currentQ);
-    const correct=Math.round(Number(currentQ.answer)*100)/100;
-
-    const aw=Math.max(1.8*CELL, 56*DPR);
-    const ah=Math.max(1.4*CELL, 46*DPR);
-
-    // circle hitbox
-    const rAnswer = 0.46 * Math.min(aw,ah);
-
-    // bigger safe padding away from obstacles (per your last request)
-    let inflatePad = 22*DPR;
-
-    // 1) spacing among answers
-    let minDist = 4.6 * Math.max(aw,ah);
-    // 2) spacing from snake
-    let minSnakeDist = 4.6 * Math.max(aw,ah);
-    // 3) anti-alignment
-    let minDx = 2.4 * aw;
-    let minDy = 2.4 * ah;
-
-    const baseForbidden = obstacleRectsPx();
-
-    function centerOf(r){ return {x:r.x+r.w/2, y:r.y+r.h/2}; }
-    function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
-
-    // spawn zone excludes: close to board/prof/bubble/obstacles by inflatePad already
-    function randomCandidate(){
-      const x=randInt(marginEdge + aw/2, W - marginEdge - aw/2);
-      const y=randInt(playTopY + ah/2, H - marginEdge - ah/2);
-      return { x:x-aw/2, y:y-ah/2, w:aw, h:ah };
-    }
-
-    // fallback safe points (grid), computed once per spawn
-    const fallback=[];
-    {
-      const gx = Math.max(marginEdge + aw/2, marginEdge + 2*aw);
-      const gx2 = W - Math.max(marginEdge + aw/2, marginEdge + 2*aw);
-      const gy = Math.max(playTopY + ah/2, playTopY + 2*ah);
-      const gy2 = H - Math.max(marginEdge + ah/2, marginEdge + 2*ah);
-      fallback.push({x:gx-aw/2,y:gy-ah/2,w:aw,h:ah});
-      fallback.push({x:gx2-aw/2,y:gy-ah/2,w:aw,h:ah});
-      fallback.push({x:gx-aw/2,y:gy2-ah/2,w:aw,h:ah});
-      fallback.push({x:gx2-aw/2,y:gy2-ah/2,w:aw,h:ah});
-      // midpoints
-      const cx=W/2, cy=(playTopY+H)/2;
-      fallback.push({x:cx-aw/2,y:gy-ah/2,w:aw,h:ah});
-      fallback.push({x:cx-aw/2,y:gy2-ah/2,w:aw,h:ah});
-    }
-
-    function okRect(r, forbid){
-      // forbidden: obstacles + margins + bubble
-      for(const f of forbid){ if(rectsOverlap(r,f)) return false; }
-      // avoid UI
-      for(const u of uiRectsPx().map(rr=>inflateRect(rr, 10*DPR))){
-        if(rectsOverlap(r,u)) return false;
-      }
-      const rc=centerOf(r);
-      // spacing among answers
-      for(const a of answers){
-        const ac={x:a.cx,y:a.cy};
-        const dx=Math.abs(rc.x-ac.x);
-        const dy=Math.abs(rc.y-ac.y);
-        if(dist(rc,ac) < minDist) return false;
-        if(dx < minDx && dy < minDy) return false;
-      }
-      // spacing from snake
-      for(const p of snakeCentersPx()){
-        if(dist(rc,p) < minSnakeDist) return false;
-      }
-      return true;
-    }
-
-    // progressive relaxation strategy
-    let placedCount=0;
-    const correctFirst = choices.slice(); // keep order; random already
-    const relaxSteps = [
-      {tries:5000, pad:inflatePad, minDist, minDx, minDy, minSnakeDist},
-      {tries:5000, pad:inflatePad*0.85, minDist:minDist*0.90, minDx:minDx*0.90, minDy:minDy*0.90, minSnakeDist:minSnakeDist*0.90},
-      {tries:5000, pad:inflatePad*0.70, minDist:minDist*0.82, minDx:minDx*0.80, minDy:minDy*0.80, minSnakeDist:minSnakeDist*0.82},
-      {tries:5000, pad:inflatePad*0.55, minDist:minDist*0.72, minDx:minDx*0.70, minDy:minDy*0.70, minSnakeDist:minSnakeDist*0.72},
-    ];
-
-    for(const v of correctFirst){
-      let placed=null;
-
-      // try progressively relaxed constraints
-      for(const step of relaxSteps){
-        inflatePad = step.pad;
-        minDist = step.minDist;
-        minDx = step.minDx;
-        minDy = step.minDy;
-        minSnakeDist = step.minSnakeDist;
-
-        const forbid = baseForbidden.map(r=>inflateRect(r, inflatePad));
-
-        for(let tries=0; tries<step.tries; tries++){
-          const c=randomCandidate();
-          if(okRect(c, forbid)){ placed=c; break; }
-        }
-        if(placed) break;
-      }
-
-      // fallback points
-      if(!placed){
-        const forbid = baseForbidden.map(r=>inflateRect(r, inflatePad*0.5));
-        for(const fb of fallback){
-          if(okRect(fb, forbid)){ placed=fb; break; }
-        }
-      }
-
-      // ultimate fallback: put at random ignoring spacing (but still forbidden)
-      if(!placed){
-        const forbid = baseForbidden.map(r=>inflateRect(r, 10*DPR));
-        for(let tries=0; tries<12000; tries++){
-          const c=randomCandidate();
-          let ok=true;
-          for(const f of forbid){ if(rectsOverlap(c,f)) { ok=false; break; } }
-          if(!ok) continue;
-          placed=c; break;
-        }
-      }
-
-      // final absolute fallback: deterministic safe spot (guarantee not null)
-      if(!placed){
-        placed = {x:Math.max(marginEdge, 10*DPR), y:Math.max(playTopY+10*DPR, 10*DPR), w:aw, h:ah};
-      }
-
-      const cx = placed.x + placed.w/2;
-      const cy = placed.y + placed.h/2;
-
-      // reduced rect fallback (secondary)
-      const hitScale=0.62;
-      const hitW=placed.w*hitScale, hitH=placed.h*hitScale;
-      const hit = { x: placed.x + (placed.w-hitW)/2, y: placed.y + (placed.h-hitH)/2, w: hitW, h: hitH };
-
-      answers.push({
-        x: placed.x, y: placed.y, w: placed.w, h: placed.h,
-        hit,
-        cx, cy,
-        r: rAnswer,
-        value: v,
-        isCorrect: eqNum(Math.round(v*100)/100, correct)
-      });
-
-      placedCount++;
-    }
-
-    // hard guarantee
-    if(answers.length !== 4){
-      // rebuild minimal safe layout
-      answers = [];
-      const forbid = baseForbidden.map(r=>inflateRect(r, 10*DPR));
-      for(let i=0;i<4;i++){
-        const v=correctFirst[i] ?? correctFirst[0] ?? correct;
-        let placed = fallback[i] || {x:W/2-aw/2,y:(playTopY+H)/2-ah/2,w:aw,h:ah};
-        // ensure not forbidden (nudge if needed)
-        for(let tries=0; tries<3000; tries++){
-          if(!forbid.some(f=>rectsOverlap(placed,f))) break;
-          placed = randomCandidate();
-        }
-        const cx=placed.x+placed.w/2, cy=placed.y+placed.h/2;
-        const hitScale=0.62;
-        const hitW=placed.w*hitScale, hitH=placed.h*hitScale;
-        answers.push({
-          x: placed.x, y: placed.y, w: placed.w, h: placed.h,
-          hit:{x:placed.x+(placed.w-hitW)/2,y:placed.y+(placed.h-hitH)/2,w:hitW,h:hitH},
-          cx, cy,
-          r: rAnswer,
-          value: v,
-          isCorrect: eqNum(Math.round(v*100)/100, correct)
-        });
-      }
-    }
-
-    answersSpawnAt = performance.now();
-  }
-
-  // ============================
-  // Start / next / reset
-  // ============================
-  function initRun(){
-    score=0;
-    mauvaisesSuite=0;
-    lives=livesFixed;
-
-    qIndex=0;
-    logRows=[];
-    penaltyMs=0;
-
-    cheatSpeedMult=1.0;
-    cheatGrowQueued=0;
-    cheatDiffBoost=0;
-    cheat194Active=false;
-    correctHighlight=false;
-    cheatUsed=[];
-
-    baseTick=getTickManual();
-    tickMs=baseTick;
-
-    chronoS=getChrono();
-    timeLeft=chronoS;
-    secAcc=0;
-
-    // snake start length 3
-    snake=[];
-    const startLen=3;
-
-    // start safe in parquet
-    const leftCell=Math.ceil(marginEdge/CELL)+3;
-    const rightCell=COLS-leftCell-3;
-    const minY=Math.max(boardCells+3, Math.ceil(marginEdge/CELL)+3);
-    const maxY=ROWS - Math.ceil(marginEdge/CELL) - 4;
-
-    let sx=clamp(Math.floor(COLS*0.22), leftCell+2, rightCell-2);
-    let sy=clamp(Math.floor(ROWS*0.85), minY+2, maxY);
-
-    for(let tries=0; tries<3500; tries++){
-      const ok=(x,y)=>x>=0&&y>=0&&x<COLS&&y<ROWS && !cellInObstacle(x,y) && y>=boardCells;
-      let good=true;
-      for(let i=0;i<startLen;i++){
-        if(!ok(sx-i, sy)){ good=false; break; }
-      }
-      if(good) break;
-      sx=randInt(leftCell+4, rightCell-2);
-      sy=randInt(minY+2, maxY);
-    }
-
-    for(let i=0;i<startLen;i++) snake.push({x:sx-i,y:sy});
-    dir={x:1,y:0}; nextDir={x:1,y:0};
-
-    // difficulty reset from slider
-    diffLevel = sliderToDiff(diff01);
-
-    currentQ=generateQuestion();
-    spawnAnswers();
-
-    qStartTime=performance.now();
-    profBubbleTimer=0;
-    bubbleRectPx=null;
-
-    // stall watchdog
-    lastHeadCellKey = `${snake[0].x},${snake[0].y}`;
-    stillFrames = 0;
-  }
-
-  function nextQuestion(){
-    qIndex++;
-    currentQ=generateQuestion();
-    chronoS=getChrono();
-    timeLeft=chronoS;
-    secAcc=0;
-    spawnAnswers();
-    qStartTime=performance.now();
-  }
-
-  // Difficulty auto-increase every 5 correct answers (clamp 1..5)
-  function autoDifficultyUp(){
-    const target = 1 + Math.floor(score/5);
-    if(target > diffLevel){
-      diffLevel = clamp(target, 1, 5);
-    }
-  }
-
-  // ============================
-  // Collisions / bounce
-  // ============================
-  function hitsSelf(cx,cy){
-    return snake.some((s,idx)=>idx!==0 && s.x===cx && s.y===cy);
-  }
-
-  function applyWrongPenalty(){
-    penaltyMs += 10;
-  }
-
-  function shrinkSnake(){
-    if(snake.length > 1) snake.pop();
-  }
-
-  function growSnake(n=1){
-    for(let k=0;k<n;k++){
-      const t=snake[snake.length-1];
-      snake.push({x:t.x,y:t.y});
-    }
-  }
-
-  function rectIntersects(a,b){
-    return !(a.x+a.w < b.x || b.x+b.w < a.x || a.y+a.h < b.y || b.y+b.h < a.y);
-  }
-  function headRectPxAtCell(cx,cy){
-    return {x:cx*CELL,y:cy*CELL,w:CELL,h:CELL};
-  }
-
-  function bounceDirection(fromDir, hx, hy){
-    // Priorities: reverse, then orthogonals, then forward (rare)
-    const cand=[
-      {x:-fromDir.x,y:-fromDir.y},
-      {x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0},
-      {x:fromDir.x,y:fromDir.y},
-    ];
-    const uniq=[];
-    const seen=new Set();
-    for(const d of cand){
-      const k=`${d.x},${d.y}`;
-      if(!seen.has(k)){ seen.add(k); uniq.push(d); }
-    }
-    for(const d of uniq){
-      let nx=hx+d.x, ny=hy+d.y;
-
-      // wrap always ON
-      if(nx<0) nx=COLS-1;
-      if(nx>=COLS) nx=0;
-      if(ny<0) ny=ROWS-1;
-      if(ny>=ROWS) ny=0;
-
-      // top forbidden
-      if(ny < boardCells) continue;
-      if(cellInObstacle(nx,ny)) continue;
-
-      // bubble obstacle: must NOT stop game, just avoid
-      if(bubbleRectPx && rectIntersects(headRectPxAtCell(nx,ny), bubbleRectPx)) continue;
-
-      // self: avoid
-      if(hitsSelf(nx,ny)) continue;
-
-      return d;
-    }
-    return null;
-  }
-
-  // ============================
-  // Circle collision
-  // ============================
-  function circleHitSnakeAnswer(headCx, headCy, snakeR, a){
-    const dx = headCx - a.cx;
-    const dy = headCy - a.cy;
-    const d = Math.hypot(dx,dy);
-    return d <= (snakeR + a.r);
-  }
-
-  // ============================
-  // Step
-  // ============================
-  function step(){
-    // apply queued growth (from cheat)
-    if(cheatGrowQueued>0){
-      growSnake(cheatGrowQueued);
-      cheatGrowQueued=0;
-    }
-
-    dir=nextDir;
-
-    const head=snake[0];
-    let nx=head.x+dir.x;
-    let ny=head.y+dir.y;
-
-    // wrap always ON
-    if(nx<0) nx=COLS-1;
-    if(nx>=COLS) nx=0;
-    if(ny<0) ny=ROWS-1;
-    if(ny>=ROWS) ny=0;
-
-    // forbid top zone
-    if(ny < boardCells){
-      const bd=bounceDirection(dir, head.x, head.y);
-      if(bd){ dir=bd; nextDir={...bd}; }
-      return;
-    }
-
-    // obstacles => bounce
-    if(cellInObstacle(nx,ny)){
-      const bd=bounceDirection(dir, head.x, head.y);
-      if(bd){ dir=bd; nextDir={...bd}; }
-      return;
-    }
-
-    // bubble obstacle => bounce (NEVER end)
-    if(bubbleRectPx){
-      const nextHeadPx=headRectPxAtCell(nx,ny);
-      if(rectIntersects(nextHeadPx, bubbleRectPx)){
-        const bd=bounceDirection(dir, head.x, head.y);
-        if(bd){ dir=bd; nextDir={...bd}; }
-        return;
-      }
-    }
-
-    // self => bounce (avoid being stuck)
-    if(hitsSelf(nx,ny)){
-      const bd=bounceDirection(dir, head.x, head.y);
-      if(bd){ dir=bd; nextDir={...bd}; }
-      return;
-    }
-
-    // move
-    snake.unshift({x:nx,y:ny});
-
-    // stall watchdog (if head never changes cell)
-    const hk = `${snake[0].x},${snake[0].y}`;
-    if(hk === lastHeadCellKey) stillFrames++;
-    else { stillFrames=0; lastHeadCellKey=hk; }
-    if(stillFrames > 180){ // ~3s at 60fps
-      updateBestIfNeeded();
-      screen=SC.FIN;
-      return;
-    }
-
-    // answer collision (circle primary, rect fallback)
-    if(answers && answers.length===4){
-      const headCx = snake[0].x*CELL + CELL/2;
-      const headCy = snake[0].y*CELL + CELL/2;
-      const snakeR = 0.45*CELL;
-
-      let pickedIdx = -1;
-      for(let i=0;i<answers.length;i++){
-        const a=answers[i];
-        if(circleHitSnakeAnswer(headCx, headCy, snakeR, a)){ pickedIdx=i; break; }
-      }
-      if(pickedIdx===-1){
-        // fallback rect (reduced hit)
-        const hr = {x:snake[0].x*CELL, y:snake[0].y*CELL, w:CELL, h:CELL};
-        pickedIdx = answers.findIndex(a=>a && a.hit && rectIntersects(hr,a.hit));
-      }
-
-      if(pickedIdx!==-1){
-        const tNow=performance.now();
-
-        // ignore very quick spawn pickups
-        if(tNow - answersSpawnAt < PICKUP_IGNORE_MS){
-          snake.pop();
-          return;
-        }
-
-        const picked=answers[pickedIdx];
-        const tempsSec = Math.max(0, (tNow - qStartTime)/1000);
-
-        const activeCheatsNow = [
-          cheat194Active ? "194" : "",
-          (cheatSpeedMult>1.0) ? "+++" : "",
-          (cheatSpeedMult<1.0) ? "---" : "",
-          (cheatDiffBoost>0) ? "***" : ""
-        ].filter(Boolean).join(",");
-
-        if(picked && picked.isCorrect){
-          logAttempt({
-            chap: currentQ.chap,
-            niveau: diffLevel,
-            question: currentQ.text,
-            correct: currentQ.answer,
-            chosen: picked.value,
-            result: "bon",
-            tempsSec,
-            cheatFlags: activeCheatsNow
-          });
-
-          score++;
-          autoDifficultyUp();
-          growSnake(1);
-
-          profBubbleTimer=2.0;
-          profBubbleText="Bonne réponse !";
-          sfxBon();
-          mauvaisesSuite=0;
-
-          nextQuestion();
-        } else {
-          logAttempt({
-            chap: currentQ.chap,
-            niveau: diffLevel,
-            question: currentQ.text,
-            correct: currentQ.answer,
-            chosen: picked ? picked.value : "—",
-            result: "faux",
-            tempsSec,
-            cheatFlags: activeCheatsNow
-          });
-
-          sfxFaux();
-          applyWrongPenalty();
-          shrinkSnake();
-          lives--;
-          mauvaisesSuite++;
-
-          if(lives<=0 || mauvaisesSuite>=3){
-            updateBestIfNeeded();
-            screen=SC.FIN;
-            return;
-          }
-          nextQuestion();
-        }
-
-        snake.pop();
-        return;
-      }
-    }
-
-    // normal
-    snake.pop();
-  }
-
-  // ============================
-  // Chrono (mandatory)
-  // ============================
-  function tickChrono(dt){
-    secAcc += dt;
-    while(secAcc>=1){
-      secAcc-=1;
-      timeLeft--;
-      if(timeLeft<=0){
-        const tNow=performance.now();
-        const tempsSec = Math.max(0, (tNow - qStartTime)/1000);
-
-        const activeCheatsNow = [
-          cheat194Active ? "194" : "",
-          (cheatSpeedMult>1.0) ? "+++" : "",
-          (cheatSpeedMult<1.0) ? "---" : "",
-          (cheatDiffBoost>0) ? "***" : ""
-        ].filter(Boolean).join(",");
-
-        logAttempt({
-          chap: currentQ.chap,
-          niveau: diffLevel,
-          question: currentQ.text,
-          correct: currentQ.answer,
-          chosen: "timeout",
-          result: "temps écoulé",
-          tempsSec,
-          cheatFlags: activeCheatsNow
-        });
-
-        updateBestIfNeeded();
-        screen=SC.FIN;
-        break;
-      }
-    }
-  }
-
-  // ============================
-  // Rendering (classroom)
-  // ============================
-  function drawBackground(){
-    ctx.fillStyle="#fff";
-    ctx.fillRect(0,0,W,H);
-
-    // parquet below topbar
-    const plankW=Math.max(12*DPR, Math.floor(CELL*0.8));
-    for(let x=0;x<W;x+=plankW){
-      const alt=(Math.floor(x/plankW)%2===0);
-      ctx.fillStyle=alt ? "rgba(193,138,86,0.28)" : "rgba(193,138,86,0.22)";
-      ctx.fillRect(x, topBarH, plankW, H-topBarH);
-      ctx.fillStyle="rgba(120,80,40,0.08)";
-      ctx.fillRect(x+plankW-1, topBarH, 1, H-topBarH);
-    }
-
-    // topBar area (outside class)
-    ctx.fillStyle="rgba(245,246,250,1)";
-    ctx.fillRect(0,0,W,topBarH);
-    ctx.fillStyle="rgba(0,0,0,0.08)";
-    ctx.fillRect(0, topBarH-1, W, 1);
-
-    // board: less wide, centered
-    const pad=Math.floor(12*DPR);
-    const by=topBarH+pad;
-    const bh=Math.max(1, boardH-pad);
-
-    const maxBoardW = Math.min(W - pad*2, Math.floor(W*0.64), Math.floor(900*DPR));
-    const bw = Math.max(Math.floor(W*0.46), maxBoardW);
-    const bx = Math.floor((W - bw)/2);
-
-    // store rect for text centering
-    boardRect = { x:bx, y:by, w:bw, h:bh };
-
-    // wood frame
-    ctx.fillStyle="rgba(70,40,20,0.70)";
-    ctx.fillRect(bx, by, bw, bh);
-    // green
-    ctx.fillStyle="rgba(16,82,52,0.98)";
-    ctx.fillRect(bx+5*DPR, by+5*DPR, bw-10*DPR, bh-10*DPR);
-  }
-
-  function drawTables(){
-    for(const o of obstacles){
-      if(o.kind!=="table") continue;
-      const x=o.x*CELL,y=o.y*CELL,w=o.w*CELL,h=o.h*CELL;
-      ctx.fillStyle="rgba(120,72,38,0.95)";
-      roundRect(x+2,y+2,w-4,h-4,10*DPR);
-      ctx.fill();
-      ctx.strokeStyle="rgba(0,0,0,0.18)";
-      ctx.lineWidth=2;
-      roundRect(x+3,y+3,w-6,h-6,10*DPR);
-      ctx.stroke();
-      ctx.strokeStyle="rgba(255,255,255,0.18)";
-      ctx.lineWidth=2;
-      roundRect(x+4,y+4,w-8,h-8,10*DPR);
-      ctx.stroke();
-    }
-  }
-
-  function drawFurniture(){
-    for(const o of obstacles){
-      if(o.kind!=="meuble") continue;
-      const x=o.x*CELL,y=o.y*CELL,w=o.w*CELL,h=o.h*CELL;
-
-      // base brown vertical
-      ctx.save();
-      ctx.fillStyle="rgba(120,72,38,0.90)";
-      roundRect(x+2,y+2,w-4,h-4,14*DPR);
-      ctx.fill();
-
-      // subtle black stripes
-      ctx.globalAlpha=0.22;
-      ctx.strokeStyle="rgba(0,0,0,0.8)";
-      ctx.lineWidth=2*DPR;
-      const stripeGap = Math.max(10*DPR, Math.floor(CELL*0.9));
-      for(let yy=y+8*DPR; yy<y+h-8*DPR; yy+=stripeGap){
-        ctx.beginPath();
-        ctx.moveTo(x+6*DPR, yy);
-        ctx.lineTo(x+w-6*DPR, yy+6*DPR);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-  }
-
-  function computeBubbleRect(){
-    if(!prof || profBubbleTimer<=0) return null;
-
-    const px=prof.x*CELL+(prof.w*CELL)/2;
-    const py=prof.y*CELL+(prof.h*CELL)/2;
-
-    const bw=Math.min(320*DPR, W*0.40);
-    const bh=54*DPR;
-    const bx=clamp(px+80*DPR, marginEdge, W-marginEdge-bw);
-    const by=clamp(py-40*DPR, playTopY+8*DPR, H-marginEdge-bh);
-
-    return {x:bx,y:by,w:bw,h:bh};
-  }
-
-  function drawProfessor(){
-    if(!prof) return;
-    const px=prof.x*CELL+(prof.w*CELL)/2;
-    const py=prof.y*CELL+(prof.h*CELL)/2;
-
-    // Prof 2x bigger visually
-    ctx.save();
-    ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.font=`${Math.floor(CELL*2.9)}px system-ui, Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji`;
-    ctx.fillText(PROF_EMOJI, px, py+2*DPR);
-    ctx.restore();
-
-    bubbleRectPx = computeBubbleRect();
-
-    if(bubbleRectPx){
-      const {x:bx,y:by,w:bw,h:bh}=bubbleRectPx;
-
-      ctx.save();
-      ctx.globalAlpha=0.95;
-      ctx.fillStyle="rgba(255,255,255,0.95)";
-      ctx.strokeStyle="rgba(0,0,0,0.16)";
-      ctx.lineWidth=2;
-      roundRect(bx,by,bw,bh,14*DPR);
-      ctx.fill(); ctx.stroke();
-
-      ctx.fillStyle="#111";
-      ctx.font=`900 ${Math.floor(14*DPR)}px system-ui`;
-      ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText(profBubbleText, bx+bw/2, by+bh/2);
-      ctx.restore();
-    } else {
-      bubbleRectPx = null;
-    }
-  }
-
-  function wrapText(text,maxW,c){
-    const words=String(text).split(" ");
-    const lines=[];
-    let line="";
-    for(const w of words){
-      const test=line?(line+" "+w):w;
-      if(c.measureText(test).width<=maxW) line=test;
-      else{ if(line) lines.push(line); line=w; }
-    }
-    if(line) lines.push(line);
-    return lines;
-  }
-
-  function drawQuestionOnBoard(){
-    if(!currentQ || !boardRect) return;
-
-    const cx = boardRect.x + boardRect.w/2;
-    const top = boardRect.y + 12*DPR;
-    const maxW = boardRect.w - 40*DPR;
-
-    ctx.save();
-    ctx.fillStyle="rgba(255,255,255,0.95)";
-    ctx.textAlign="center";
-    ctx.textBaseline="top";
-
-    // Title
-    ctx.font=`900 ${Math.floor(22*DPR)}px system-ui`;
-    ctx.fillText(`Question (${currentQ.chap})`, cx, top);
-
-    // Bigger question, centered
-    ctx.font=`900 ${Math.floor(32*DPR)}px system-ui`;
-    ctx.shadowColor="rgba(255,255,255,0.28)";
-    ctx.shadowBlur=6*DPR;
-
-    const lines=wrapText(currentQ.text.replace(/\\n/g," "), maxW, ctx);
-    for(let i=0;i<Math.min(lines.length,2);i++){
-      ctx.fillText(lines[i], cx, top+34*DPR+i*(36*DPR));
-    }
-
-    ctx.restore();
-  }
-
-  function drawTopBarHUD(){
-    ctx.save();
-    ctx.fillStyle="#111";
-    ctx.textAlign="left"; ctx.textBaseline="middle";
-    ctx.font=`900 ${Math.floor(13*DPR)}px system-ui`;
-
-    const y=topBarH/2;
-    const left=Math.floor(14*DPR);
-
-    const chapStr = enabledChaptersList().join("+");
-    const best = bestScore();
-
-    ctx.fillText(
-      `Nom: ${studentName.trim()||"—"} | Classe: ${studentClass.trim()||"—"} | Chapitres: ${chapStr} | Score: ${score} | Best: ${best} | Diff: ${diffLevel}/5 | Vitesse: ${tickMs}ms | Temps: ${timeLeft}s | Vies: ${lives} | Faux: ${mauvaisesSuite}/3`,
-      left, y
-    );
-
-    // top-left author
-    ctx.globalAlpha=0.18;
-    ctx.textAlign="left";
-    ctx.fillText("//Tom Rougeaud", left, Math.floor(12*DPR));
-
-    // top-right: Export + Fullscreen buttons + link
-    const btnW=Math.floor(130*DPR);
-    const btnH=Math.floor(34*DPR);
-    const gap=8*DPR;
-
-    const rightPad = Math.floor(12*DPR);
-    const bx1 = W - rightPad - btnW;
-    const by1 = Math.floor((topBarH - btnH)/2) - Math.floor(18*DPR);
-    const bx2 = bx1;
-    const by2 = by1 + btnH + gap;
-
-    drawButton("btn_export_html_top", bx1, by1, btnW, btnH, "Export HTML", {alpha:0.35});
-    drawButton("btn_fullscreen", bx2, by2, btnW, btnH, "Plein écran", {alpha:0.35});
-
-    // discrete link area (clickable)
-    const linkW = Math.floor(150*DPR), linkH = Math.floor(22*DPR);
-    const lx = W - rightPad - linkW;
-    const ly = 4*DPR;
-    ctx.globalAlpha=0.18;
-    ctx.textAlign="right"; ctx.textBaseline="top";
-    ctx.font=`900 ${Math.floor(12*DPR)}px system-ui`;
-    ctx.fillText("//Tom Rougeaud", lx+linkW, ly);
-    ctx.globalAlpha=1;
-    addUI({id:"link_site", type:"button", x:lx, y:ly, w:linkW, h:linkH, disabled:false});
-
-    // Pause & Restart (low opacity)
-    const pbW=Math.floor(110*DPR);
-    const pbH=Math.floor(34*DPR);
-    const pbx = W - rightPad - pbW - btnW - 10*DPR;
-    const pby = Math.floor((topBarH - (pbH*2 + 8*DPR))/2);
-
-    drawButton("btn_pause", pbx, pby, pbW, pbH, "Pause", {alpha:0.35});
-    drawButton("btn_restart", pbx, pby+pbH+8*DPR, pbW, pbH, "Recommencer", {alpha:0.35});
-
-    ctx.restore();
-  }
-
-  function drawAnswers(){
-    for(const a of answers){
-      if(!a) continue;
-      const cx=a.x+a.w/2, cy=a.y+a.h/2;
-      ctx.save();
-      ctx.globalAlpha=0.95;
-
-      // shadow
-      ctx.fillStyle="rgba(0,0,0,0.10)";
-      roundRect(a.x+2*DPR,a.y+2*DPR,a.w,a.h,14*DPR);
-      ctx.fill();
-
-      // if cheat 194 active: tint correct answer
-      if(correctHighlight && a.isCorrect){
-        ctx.globalAlpha=0.42;
-        ctx.fillStyle="rgba(20,120,60,1)";
-        roundRect(a.x+4*DPR,a.y+4*DPR,a.w-8*DPR,a.h-8*DPR,14*DPR);
-        ctx.fill();
-        ctx.globalAlpha=0.95;
-      }
-
-      // notebook emoji
-      ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.font=`${Math.floor(Math.min(a.w,a.h)*0.95)}px system-ui, Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji`;
-      ctx.fillStyle="#111";
-      ctx.fillText(NOTE, cx, cy+2*DPR);
-
-      // value
-      ctx.globalAlpha=0.98;
-      ctx.font=`900 ${Math.floor(18*DPR)}px system-ui`;
-      ctx.fillStyle="#111";
-      ctx.fillText(fmt(a.value), cx, cy+1*DPR);
-
-      ctx.restore();
-    }
-  }
-
-  function drawSnake(){
-    ctx.textAlign="center";
-    ctx.textBaseline="middle";
-    ctx.font=`${Math.floor(CELL*0.90)}px system-ui, Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji`;
-
-    for(let i=0;i<snake.length;i++){
-      const s=snake[i];
-      const px=s.x*CELL, py=s.y*CELL;
-      const isHead=(i===0);
-
-      ctx.fillStyle=isHead?"rgba(17,17,17,0.10)":"rgba(17,17,17,0.06)";
-      roundRect(px+2,py+2,CELL-4,CELL-4,10*DPR); ctx.fill();
-      ctx.strokeStyle=isHead?"rgba(0,0,0,0.28)":"rgba(0,0,0,0.12)";
-      ctx.lineWidth=isHead?2:1;
-      roundRect(px+2,py+2,CELL-4,CELL-4,10*DPR); ctx.stroke();
-
-      ctx.fillStyle="#111";
-      ctx.fillText(NOTE, px+CELL/2, py+CELL/2+1*DPR);
-    }
-  }
-
-  // ============================
-  // Menu pages
-  // ============================
-  function drawMenuBoardText(){
-    // centered on green board
-    const cx = boardRect.x + boardRect.w/2;
-    const top = boardRect.y + 18*DPR;
-    const maxW = boardRect.w - 50*DPR;
-
-    ctx.save();
-    ctx.textAlign="center"; ctx.textBaseline="top";
-    ctx.fillStyle="rgba(255,255,255,0.95)";
-    ctx.font=`900 ${Math.floor(22*DPR)}px system-ui`;
-    ctx.fillText("Bienvenue dans Maths Snake", cx, top);
-
-    ctx.font=`900 ${Math.floor(18*DPR)}px system-ui`;
-    const msg = "Choisis un mode et prépare-toi à répondre aux questions.";
-    const lines=wrapText(msg, maxW, ctx);
-    for(let i=0;i<Math.min(lines.length,2);i++){
-      ctx.fillText(lines[i], cx, top+34*DPR+i*(24*DPR));
-    }
-    ctx.restore();
-  }
-
-  function drawCheckbox(id,x,y,size,label,checked){
-    ctx.save();
-    ctx.fillStyle="rgba(255,255,255,0.92)";
-    ctx.strokeStyle="rgba(0,0,0,0.16)";
-    ctx.lineWidth=2;
-    roundRect(x,y,size,size,6*DPR);
-    ctx.fill(); ctx.stroke();
-
-    if(checked){
-      ctx.strokeStyle="rgba(17,17,17,0.85)";
-      ctx.lineWidth=3*DPR;
-      ctx.beginPath();
-      ctx.moveTo(x+5*DPR, y+size*0.55);
-      ctx.lineTo(x+size*0.42, y+size-6*DPR);
-      ctx.lineTo(x+size-5*DPR, y+6*DPR);
-      ctx.stroke();
-    }
-
-    ctx.fillStyle="#111";
-    ctx.font=`900 ${Math.floor(14*DPR)}px system-ui`;
-    ctx.textAlign="left"; ctx.textBaseline="middle";
-    ctx.fillText(label, x+size+10*DPR, y+size/2);
-
-    ctx.restore();
-    addUI({id,type:"check",x,y,w:size+220*DPR,h:size,checked});
-  }
-
-  function drawMenu1(){
-    drawMenuBoardText();
-
-    const pad=Math.floor(18*DPR);
-    const x=pad;
-    const y=playTopY+pad;
-    const w=W-pad*2;
-    const h=H-y-pad;
-
-    drawCard(x,y,w,h,0.92);
-
-    ctx.fillStyle="#111";
-    ctx.textAlign="left";
-    ctx.textBaseline="top";
-    ctx.font=`900 ${Math.floor(22*DPR)}px system-ui`;
-    ctx.fillText("C'est parti !", x+16*DPR, y+14*DPR);
-
-    const gap=12*DPR;
-    const inputH=Math.floor(74*DPR);
-    const inputW=Math.floor((w - 16*DPR*2 - gap)/2);
-    const ix1=x+16*DPR, ix2=ix1+inputW+gap;
-    const iy=y+58*DPR;
-
-    drawTextInput("inp_name", ix1, iy, inputW, inputH, "Nom", studentName, focusedInput==="name");
-    drawTextInput("inp_class", ix2, iy, inputW, inputH, "Classe", studentClass, focusedInput==="class");
-
-    // Checkboxes chapitres
-    const titleY=iy+inputH+12*DPR;
-    ctx.fillStyle="#111";
-    ctx.font=`900 ${Math.floor(15*DPR)}px system-ui`;
-    ctx.fillText("Chapitres (coche ceux que tu veux)", x+16*DPR, titleY);
-
-    const cbSize=Math.floor(24*DPR);
-    let cy=titleY+28*DPR;
-    const cx1=x+16*DPR;
-    const cx2=x+Math.floor(w/2);
-
-    for(let i=0;i<CHAPS.length;i++){
-      const c=CHAPS[i];
-      const col = (i<Math.ceil(CHAPS.length/2)) ? 1 : 2;
-      const row = (col===1) ? i : i-Math.ceil(CHAPS.length/2);
-      const px = (col===1) ? cx1 : cx2;
-      const py = cy + row*(cbSize+12*DPR);
-      drawCheckbox(`chk_${c.key}`, px, py, cbSize, c.label, !!chapEnabled.get(c.key));
-    }
-
-    // Next
-    const btnW=Math.floor(w*0.40);
-    const btnH=Math.floor(52*DPR);
-    const bx=x+(w-btnW)/2;
-    const by=y+h-btnH-14*DPR;
-    drawButton("btn_next", bx, by, btnW, btnH, "Suivant", {primary:true, alpha:0.95});
-
-    // Optional export in menu
-    drawButton("btn_export_html_menu", x+w-16*DPR-140*DPR, y+14*DPR, 140*DPR, 40*DPR, "Export HTML", {alpha:0.40});
-  }
-
-  function drawMenu2(){
-    const pad=Math.floor(18*DPR);
-    const x=pad;
-    const y=playTopY+pad;
-    const w=W-pad*2;
-    const h=H-y-pad;
-
-    drawCard(x,y,w,h,0.92);
-
-    ctx.fillStyle="#111";
-    ctx.textAlign="left";
-    ctx.textBaseline="top";
-    ctx.font=`900 ${Math.floor(22*DPR)}px system-ui`;
-    ctx.fillText("Options de partie", x+16*DPR, y+14*DPR);
-
-    const gap=12*DPR;
-    const sW=Math.floor((w - 16*DPR*2 - gap)/2);
-    const sH=Math.floor(78*DPR);
-    const sY=y+56*DPR;
-
-    // chrono 20..60
-    drawSlider("s_chrono", x+16*DPR, sY, sW, sH,
-      `Chrono/question → ${getChrono()} s`,
-      chrono01, "20s", "60s");
-
-    // diff 1..5
-    const dNow = sliderToDiff(diff01);
-    drawSlider("s_diff", x+16*DPR + sW + gap, sY, sW, sH,
-      `Difficulté → ${dNow}/5`,
-      diff01, "1", "5");
-
-    // speed 350..20, default 150
-    drawSlider("s_speed", x+16*DPR, sY + sH + 12*DPR, sW, sH,
-      `Vitesse → ${getTickManual()} ms (droite=rapide)`,
-      speed01, "350", "20");
-
-    // Fullscreen at start toggle (simple checkbox)
-    const cbSize=Math.floor(24*DPR);
-    const cx=x+16*DPR + sW + gap;
-    const cy=sY + sH + 26*DPR;
-    drawCheckbox("chk_full", cx, cy, cbSize, "Plein écran au démarrage", autoFullscreen);
-
-    // Buttons
-    const btnH=Math.floor(52*DPR);
-    const btnW=Math.floor((w - 16*DPR*2 - gap)/2);
-    const by=y+h-btnH-14*DPR;
-
-    drawButton("btn_back", x+16*DPR, by, btnW, btnH, "Retour", {alpha:0.92});
-    drawButton("btn_start", x+16*DPR + btnW + gap, by, btnW, btnH, "Démarrer", {primary:true, alpha:0.95});
-  }
-
-  // ============================
-  // Pause & fin
-  // ============================
-  function drawPause(){
-    ctx.save();
-    ctx.fillStyle="rgba(0,0,0,0.55)";
-    ctx.fillRect(0,0,W,H);
-
-    const w=Math.floor(W*0.68);
-    const h=Math.floor(H*0.36);
-    const x=(W-w)/2;
-    const y=(H-h)/2;
-    drawCard(x,y,w,h,0.95);
-
-    ctx.fillStyle="#111";
-    ctx.textAlign="center";
-    ctx.textBaseline="top";
-    ctx.font=`900 ${Math.floor(26*DPR)}px system-ui`;
-    ctx.fillText("PAUSE", x+w/2, y+16*DPR);
-
-    const btnW=Math.floor(w*0.55);
-    const btnH=Math.floor(50*DPR);
-    const bx=x+(w-btnW)/2;
-
-    drawButton("btn_reprendre", bx, y+60*DPR, btnW, btnH, "Reprendre", {primary:true, alpha:0.92});
-    drawButton("btn_recommencer", bx, y+60*DPR + btnH + 10*DPR, btnW, btnH, "Recommencer", {alpha:0.92});
-    drawButton("btn_menu", bx, y+60*DPR + 2*(btnH + 10*DPR), btnW, btnH, "Menu", {alpha:0.92});
-
-    // Cheatcodes at bottom (do not interfere with buttons)
-    ctx.fillStyle="rgba(0,0,0,0.65)";
-    ctx.textAlign="center";
-    ctx.textBaseline="bottom";
-    ctx.font=`900 ${Math.floor(12*DPR)}px system-ui`;
-    const lines = [
-      "Cheatcodes : +++ (vitesse +50%)  |  --- (vitesse -50%)  |  *** (grandir +2 cahiers)",
-      "CHEATCODE BONNE REPONSE : tape le résultat de 2²(24+100/4)-2"
-    ];
-    ctx.fillText(lines[0], x+w/2, y+h-34*DPR);
-    ctx.fillText(lines[1], x+w/2, y+h-14*DPR);
-
-    ctx.restore();
-  }
-
-  function computeBilan(){
-    const chapList=["EQUATION","POURCENTAGES","CALCUL_MENTAL","CONVERSIONS","CARRE"];
-    const stats={};
-    for(const c of chapList) stats[c]={total:0,bon:0,faux:0,timeout:0,temps:0};
-    const global={total:0,bon:0,faux:0,timeout:0,temps:0};
-
-    for(const r of logRows){
-      const c=r.chapitre;
-      if(!stats[c]) stats[c]={total:0,bon:0,faux:0,timeout:0,temps:0};
-      stats[c].total++; global.total++;
-      const t=Number(r.temps_par_question_s)||0;
-      stats[c].temps+=t; global.temps+=t;
-
-      if(r.resultat==="bon"){ stats[c].bon++; global.bon++; }
-      else if(r.resultat==="temps écoulé"){ stats[c].timeout++; global.timeout++; }
-      else { stats[c].faux++; global.faux++; }
-    }
-
-    const taux=(s)=>s.total?Math.round((s.bon/s.total)*100):0;
-    const tpsMoy=(s)=>s.total?Math.round((s.temps/s.total)*100)/100:0;
-
-    return {stats, global, taux, tpsMoy};
-  }
-
-  function drawFin(){
-    updateBestIfNeeded();
-
-    const pad=Math.floor(18*DPR);
-    const x=pad;
-    const y=playTopY+pad;
-    const w=W-pad*2;
-    const h=H-y-pad;
-
-    drawCard(x,y,w,h,0.92);
-
-    ctx.fillStyle="#111";
-    ctx.textAlign="left";
-    ctx.textBaseline="top";
-    ctx.font=`900 ${Math.floor(22*DPR)}px system-ui`;
-    ctx.fillText("Fin de partie", x+16*DPR, y+14*DPR);
-
-    ctx.font=`900 ${Math.floor(14*DPR)}px system-ui`;
-    ctx.fillText(`Nom : ${studentName.trim()||"—"} | Classe : ${studentClass.trim()||"—"} | Date : ${nowStampFR()}`, x+16*DPR, y+46*DPR);
-    ctx.fillText(`Score : ${score} | Meilleur : ${bestScore()} | Difficulté finale : ${diffLevel}/5`, x+16*DPR, y+70*DPR);
-
-    const {stats, global, taux, tpsMoy} = computeBilan();
-
-    ctx.font=`900 ${Math.floor(15*DPR)}px system-ui`;
-    ctx.fillText("Bilan", x+16*DPR, y+102*DPR);
-
-    ctx.font=`900 ${Math.floor(13*DPR)}px system-ui`;
-    let yy=y+126*DPR;
-    const list=["EQUATION","POURCENTAGES","CALCUL_MENTAL","CONVERSIONS","CARRE"];
-    for(const k of list){
-      const s=stats[k]||{total:0,bon:0,faux:0,timeout:0,temps:0};
-      ctx.fillText(`${k} : ${s.bon}/${s.total} (${taux(s)}%) | temps moyen : ${fmt(tpsMoy(s))} s`, x+16*DPR, yy);
-      yy+=18*DPR;
-      if(yy>y+h-180*DPR) break;
-    }
-    ctx.fillText(`GLOBAL : ${global.bon}/${global.total} (${taux(global)}%) | temps moyen : ${fmt(tpsMoy(global))} s`, x+16*DPR, yy+6*DPR);
-
-    // cheat usage summary
-    ctx.fillStyle="rgba(0,0,0,0.65)";
-    ctx.font=`900 ${Math.floor(12*DPR)}px system-ui`;
-    const used = cheatUsed.length ? cheatUsed.map(c=>`${c.code}@${c.time}`).join(" | ") : "aucun";
-    ctx.fillText(`Cheatcodes utilisés : ${used}`, x+16*DPR, yy+34*DPR);
-
-    const gap=10*DPR;
-    const btnH=Math.floor(52*DPR);
-    const btnW=Math.floor((w - 16*DPR*2 - 3*gap)/4);
-    const by=y+h-btnH-16*DPR;
-    const bx1=x+16*DPR;
-    const bx2=bx1+btnW+gap;
-    const bx3=bx2+btnW+gap;
-    const bx4=bx3+btnW+gap;
-
-    drawButton("btn_rejouer", bx1, by, btnW, btnH, "Rejouer", {primary:true, alpha:0.92});
-    drawButton("btn_menu_fin", bx2, by, btnW, btnH, "Menu", {alpha:0.92});
-    drawButton("btn_export_csv", bx3, by, btnW, btnH, "Exporter CSV", {alpha:0.92});
-    drawButton("btn_export_html", bx4, by, btnW, btnH, "Exporter HTML", {alpha:0.92});
-  }
-
-  function drawCrash(){
-    ctx.save();
-    ctx.fillStyle="rgba(0,0,0,0.60)";
-    ctx.fillRect(0,0,W,H);
-    const w=Math.floor(W*0.78);
-    const h=Math.floor(H*0.36);
-    const x=(W-w)/2, y=(H-h)/2;
-    drawCard(x,y,w,h,0.95);
-
-    ctx.fillStyle="#111";
-    ctx.textAlign="center";
-    ctx.textBaseline="top";
-    ctx.font=`900 ${Math.floor(24*DPR)}px system-ui`;
-    ctx.fillText("Erreur interne", x+w/2, y+16*DPR);
-
-    ctx.fillStyle="rgba(0,0,0,0.70)";
-    ctx.font=`900 ${Math.floor(13*DPR)}px system-ui`;
-    const lines = wrapText(String(crashMsg||"Une erreur est survenue."), w-60*DPR, ctx);
-    for(let i=0;i<Math.min(lines.length,4);i++){
-      ctx.fillText(lines[i], x+w/2, y+56*DPR+i*(18*DPR));
-    }
-
-    drawButton("btn_crash_menu", x+w*0.25, y+h-70*DPR, w*0.50, 52*DPR, "Retour menu", {primary:true, alpha:0.92});
-    ctx.restore();
-  }
-
-  // ============================
-  // Export CSV + Export HTML
-  // ============================
-  function exportCSV(){
-    const sep=";";
-    const nom=studentName.trim()||"(sans nom)";
-    const cls=studentClass.trim()||"(sans classe)";
-    const date=nowStampFR();
-
-    const {stats, global, taux, tpsMoy} = computeBilan();
-
-    const cleanCell = (s) => String(s ?? "")
-      .replace(/\r?\n/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    const lines=[];
-
-    lines.push(["FICHE DE RÉSULTATS – MATHS SNAKE"].join(sep));
-    lines.push([]);
-
-    lines.push(["IDENTITÉ & PARAMÈTRES"].join(sep));
-    lines.push(["Nom", escapeCSV(nom)].join(sep));
-    lines.push(["Classe", escapeCSV(cls)].join(sep));
-    lines.push(["Date", escapeCSV(date)].join(sep));
-    lines.push(["Chapitres cochés", escapeCSV(enabledChaptersList().join("+"))].join(sep));
-    lines.push(["Difficulté finale (sur 5)", `${diffLevel}`].join(sep));
-    lines.push(["Chronomètre / question (s)", `${chronoS}`].join(sep));
-    lines.push(["Vitesse réglée (ms/tick)", `${getTickManual()}`].join(sep));
-    lines.push(["Cheatcodes utilisés", escapeCSV(cheatUsed.length ? cheatUsed.map(c=>`${c.code}@${c.time}`).join(" | ") : "aucun")].join(sep));
-    lines.push([]);
-
-    lines.push(["TABLEAU 1 – QUESTIONS POSÉES"].join(sep));
-    lines.push([
-      "N°","Chapitre","Niveau","Question","Bonne réponse","Réponse élève","Résultat","Temps par question (s)","Cheatcodes actifs"
-    ].join(sep));
-
-    for(const r of logRows){
-      lines.push([
-        r.index,
-        escapeCSV(cleanCell(r.chapitre)),
-        escapeCSV(cleanCell(r.niveau)),
-        escapeCSV(cleanCell(r.question)),
-        escapeCSV(cleanCell(r.bonne_reponse)),
-        escapeCSV(cleanCell(r.reponse_eleve)),
-        escapeCSV(cleanCell(r.resultat)),
-        escapeCSV(cleanCell(r.temps_par_question_s)),
-        escapeCSV(cleanCell(r.cheatcodes_actifs||""))
-      ].join(sep));
-    }
-
-    lines.push([]);
-    lines.push(["TABLEAU 2 – BILAN (PAR CHAPITRE + GLOBAL)"].join(sep));
-    lines.push([
-      "Chapitre","Total","Bonnes","Fausses","Temps écoulé","Taux de bonnes réponses","Temps total (s)","Temps moyen (s)"
-    ].join(sep));
-
-    const chapList=["EQUATION","POURCENTAGES","CALCUL_MENTAL","CONVERSIONS","CARRE"];
-    for(const k of chapList){
-      const s=stats[k]||{total:0,bon:0,faux:0,timeout:0,temps:0};
-      lines.push([
-        escapeCSV(k), s.total, s.bon, s.faux, s.timeout,
-        `${taux(s)}%`, fmt(Math.round(s.temps*100)/100), fmt(tpsMoy(s))
-      ].join(sep));
-    }
-
-    lines.push([
-      "GLOBAL", global.total, global.bon, global.faux, global.timeout,
-      `${taux(global)}%`, fmt(Math.round(global.temps*100)/100), fmt(tpsMoy(global))
-    ].join(sep));
-
-    const csv="\uFEFF"+lines.join("\n");
-    const fileName=safeFileName(`MathsSnake_${nom}_${cls}.csv`);
-    downloadBlob(csv, "text/csv;charset=utf-8", fileName);
-  }
-
-  function exportHTML(){
-    const nom=studentName.trim()||"(sans_nom)";
-    const cls=studentClass.trim()||"(sans_classe)";
-    const html = document.documentElement.outerHTML;
-    const fileName = safeFileName(`MathsSnake_${nom}_${cls}.html`);
-    downloadBlob(html, "text/html;charset=utf-8", fileName);
-  }
-
-  function tryFullscreen(){
-    const el = document.documentElement;
-    if(!document.fullscreenElement && el.requestFullscreen){
-      el.requestFullscreen().catch(()=>{});
-    }
-  }
-
-  // ============================
-  // Buttons / UI actions
-  // ============================
-  let pointerDown=false;
-  let activeSlider=null;
-
-  function pointerPos(e){
-    const r=canvas.getBoundingClientRect();
-    return {x:(e.clientX-r.left)*DPR, y:(e.clientY-r.top)*DPR};
-  }
-  function sliderValueFromPointer(sl, px){
-    const pad=12*DPR;
-    const railX=sl.x+pad;
-    const railW=sl.w-2*pad;
-    return clamp((px-railX)/railW,0,1);
-  }
-  function applySlider(id, v){
-    if(id==="s_speed") speed01=v;
-    if(id==="s_chrono") chrono01=v;
-    if(id==="s_diff") diff01=v;
-    if(screen===SC.PLAY){
-      baseTick=getTickManual();
-    }
-  }
-
-  function toggleCheck(id){
-    if(id==="chk_full"){
-      autoFullscreen = !autoFullscreen;
-      return;
-    }
-    if(id.startsWith("chk_")){
-      const key=id.replace("chk_","");
-      chapEnabled.set(key, !chapEnabled.get(key));
-    }
-  }
-
-  function handleButton(id){
-    if(id==="link_site"){
-      window.open("https://mathsxp.odoo.com/", "_blank");
-      return;
-    }
-    if(id==="btn_fullscreen"){
-      tryFullscreen();
-      return;
-    }
-    if(id==="btn_export_html_top" || id==="btn_export_html_menu" || id==="btn_export_html"){
-      exportHTML();
-      return;
-    }
-    if(id==="btn_pause"){ screen=SC.PAUSE; return; }
-    if(id==="btn_restart"){ initRun(); screen=SC.PLAY; return; }
-
-    if(id==="btn_next"){ screen=SC.MENU2; focusedInput=null; return; }
-    if(id==="btn_back"){ screen=SC.MENU1; focusedInput=null; return; }
-
-    if(id==="btn_start"){
-      if(autoFullscreen) tryFullscreen();
-      initRun();
-      screen=SC.PLAY;
-      return;
-    }
-
-    if(id==="btn_reprendre"){ screen=SC.PLAY; return; }
-    if(id==="btn_recommencer"){ initRun(); screen=SC.PLAY; return; }
-    if(id==="btn_menu"){ screen=SC.MENU1; focusedInput=null; return; }
-
-    if(id==="btn_rejouer"){ initRun(); screen=SC.PLAY; return; }
-    if(id==="btn_menu_fin"){ screen=SC.MENU1; focusedInput=null; return; }
-    if(id==="btn_export_csv"){ exportCSV(); return; }
-
-    if(id==="btn_crash_menu"){
-      crashMsg="";
-      screen=SC.MENU1;
-      focusedInput=null;
-      return;
-    }
-  }
-
-  canvas.addEventListener("pointerdown",(e)=>{
-    ensureAudio();
-    pointerDown=true;
-    canvas.setPointerCapture(e.pointerId);
-    const p=pointerPos(e);
-    const h=hit(p.x,p.y);
-
-    if(!h){ focusedInput=null; return; }
-
-    if(h.type==="input"){
-      focusedInput = (h.id==="inp_name") ? "name" : "class";
-      return;
-    }
-    if(h.type==="slider"){
-      activeSlider=h.id;
-      applySlider(h.id, sliderValueFromPointer(h, p.x));
-      return;
-    }
-    if(h.type==="check"){
-      toggleCheck(h.id);
-      return;
-    }
-    if(h.type==="button" && !h.disabled){
-      handleButton(h.id);
-    }
-  });
-  canvas.addEventListener("pointermove",(e)=>{
-    if(!pointerDown || !activeSlider) return;
-    const p=pointerPos(e);
-    const sl=ui.find(u=>u.id===activeSlider);
-    if(!sl) return;
-    applySlider(activeSlider, sliderValueFromPointer(sl, p.x));
-  });
-  canvas.addEventListener("pointerup",()=>{
-    pointerDown=false;
-    activeSlider=null;
-  });
-
-  // ============================
-  // Cheat code detection
-  // ============================
-  function handleCheatBuffer(){
-    // keep last 8 chars
-    if(cheatBuffer.length>8) cheatBuffer = cheatBuffer.slice(-8);
-
-    if(cheatBuffer.endsWith("+++")){
-      cheatSpeedMult *= 1.5;
-      cheatSpeedMult = clamp(cheatSpeedMult, 0.25, 3.0);
-      markCheat("+++", "vitesse +50%");
-      cheatBuffer="";
-    } else if(cheatBuffer.endsWith("---")){
-      cheatSpeedMult /= 1.5;
-      cheatSpeedMult = clamp(cheatSpeedMult, 0.25, 3.0);
-      markCheat("---", "vitesse -50%");
-      cheatBuffer="";
-    } else if(cheatBuffer.endsWith("***")){
-      cheatGrowQueued += 2;
-      // optional difficulty boost
-      diffLevel = clamp(diffLevel+1, 1, 5);
-      cheatDiffBoost++;
-      markCheat("***", "grandir +2 & diff +1");
-      cheatBuffer="";
-    } else if(cheatBuffer.endsWith("194")){
-      // 194 => highlight correct answer
-      cheat194Active = true;
-      correctHighlight = true;
-      markCheat("194", "bonne réponse visible");
-      cheatBuffer="";
-    }
-  }
-
-  // ============================
-  // Keyboard
-  // ============================
-  window.addEventListener("keydown",(e)=>{
-    ensureAudio();
-
-    // global shortcuts
-    if(e.key==="Escape" || e.key==="m" || e.key==="M"){
-      if(screen!==SC.MENU1){
-        e.preventDefault();
-        screen=SC.MENU1;
-        focusedInput=null;
-      }
-      return;
-    }
-    if(e.key==="h" || e.key==="H"){
-      // allow everywhere
-      e.preventDefault();
-      exportHTML();
-      return;
-    }
-    if(e.key==="r" || e.key==="R"){
-      if(screen===SC.PLAY || screen===SC.PAUSE || screen===SC.FIN){
-        e.preventDefault();
-        initRun();
-        screen=SC.PLAY;
-      }
-      return;
-    }
-
-    // capture cheat characters only in PLAY/PAUSE/FIN (not in text inputs)
-    if((screen===SC.PLAY || screen===SC.PAUSE || screen===SC.FIN) && e.key.length===1){
-      const ch=e.key;
-      if(/[0-9\+\-\*]/.test(ch)){
-        cheatBuffer += ch;
-        handleCheatBuffer();
-      }
-    }
-
-    if(screen===SC.MENU1 || screen===SC.MENU2){
-      if(screen===SC.MENU1 && e.key==="Tab"){
-        e.preventDefault();
-        if(!focusedInput) focusedInput="name";
-        else if(focusedInput==="name") focusedInput="class";
-        else focusedInput="name";
-        return;
-      }
-      if(focusedInput){
-        if(e.key==="Backspace"){
-          e.preventDefault();
-          if(focusedInput==="name") studentName=studentName.slice(0,-1);
-          if(focusedInput==="class") studentClass=studentClass.slice(0,-1);
-          return;
-        }
-        if(e.key==="Enter"){
-          e.preventDefault();
-          focusedInput=(focusedInput==="name")?"class":null;
-          return;
-        }
-        if(e.key.length===1){
-          const ch=e.key;
-          const ok=/[a-zA-Z0-9À-ÿ \-_'’.]/.test(ch);
-          if(!ok) return;
-          if(focusedInput==="name" && studentName.length<24) studentName+=ch;
-          if(focusedInput==="class" && studentClass.length<16) studentClass+=ch;
-        }
-      }
-      return;
-    }
-
-    if(screen===SC.PLAY){
-      if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
-      if(e.key===" "){ screen=SC.PAUSE; return; }
-
-      // anti demi-tour
-      if(e.key==="ArrowUp" && dir.y!==1) nextDir={x:0,y:-1};
-      if(e.key==="ArrowDown" && dir.y!==-1) nextDir={x:0,y:1};
-      if(e.key==="ArrowLeft" && dir.x!==1) nextDir={x:-1,y:0};
-      if(e.key==="ArrowRight" && dir.x!==-1) nextDir={x:1,y:0};
-      return;
-    }
-
-    if(screen===SC.PAUSE){
-      if(e.key===" "){ e.preventDefault(); screen=SC.PLAY; }
-      return;
-    }
-  });
-
-  // ============================
-  // Main loop (rAF + accumulator)
-  // ============================
-  let last=performance.now();
-  let acc=0;
-
-  function safeRun(fn){
-    try{ fn(); }
-    catch(err){
-      crashMsg = (err && err.stack) ? err.stack : String(err);
-      screen = SC.CRASH;
-    }
-  }
-
-  function computeTickMs(){
-    // base from slider + penalty, apply cheatSpeedMult
-    const base = getTickManual();
-    const raw = Math.round((base - penaltyMs) / cheatSpeedMult);
-    return clamp(raw, 20, 350);
-  }
-
-  function loop(t){
-    const dt=Math.min(0.05, (t-last)/1000);
-    last=t;
-
-    clearUI();
-
-    safeRun(()=>drawBackground());
-    safeRun(()=>{ drawFurniture(); drawTables(); });
-
-    if(screen===SC.MENU1 || screen===SC.MENU2){
-      bubbleRectPx = null;
-      if(screen===SC.MENU1) safeRun(()=>drawMenu1());
-      else safeRun(()=>drawMenu2());
-    } else if(screen===SC.CRASH){
-      safeRun(()=>drawCrash());
-    } else {
-      // bubble timer
-      if(profBubbleTimer>0) profBubbleTimer=Math.max(0, profBubbleTimer-dt);
-
-      safeRun(()=>drawProfessor());
-      safeRun(()=>{ if(currentQ) drawQuestionOnBoard(); });
-      safeRun(()=>drawTopBarHUD());
-
-      if(screen===SC.PLAY){
-        tickMs = computeTickMs();
-
-        safeRun(()=>tickChrono(dt));
-        safeRun(()=>drawAnswers());
-        safeRun(()=>drawSnake());
-
-        acc += dt*1000;
-        while(acc >= tickMs && screen===SC.PLAY){
-          acc -= tickMs;
-          safeRun(()=>step());
-          if(screen!==SC.PLAY) break;
-        }
-      }
-
-      if(screen===SC.PAUSE){
-        safeRun(()=>{ drawAnswers(); drawSnake(); drawPause(); });
-      }
-
-      if(screen===SC.FIN){
-        safeRun(()=>drawFin());
-      }
-    }
-
-    requestAnimationFrame(loop);
-  }
-
-  // ============================
-  // Init
-  // ============================
-  resize();
-  buildFixedObstacles();
-  // set default options
-  // default: all chapters enabled (already), chrono 30 (already), speed default 150 (already), diff default 1
-  diff01 = 0.0;
-  // auto fullscreen at first start: handled on btn_start
-  requestAnimationFrame(loop);
-
-})();
-// Auteur : Tom Rougeaud
+<div id="card"><canvas id="cv" tabindex="0" aria-label="Maths Snake"></canvas><input id="cap" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" aria-hidden="true" tabindex="-1"></div>
+
+<!-- ============ CONTENU PÉDAGOGIQUE & TEXTES (JSON séparé) ============ -->
+<script type="application/json" id="pedago">
+{
+ "chapters":[
+  {"id":"EQUATION","label":"Équations","color":"#ff7a59"},
+  {"id":"POURCENTAGES","label":"Pourcentages","color":"#2fb5a8"},
+  {"id":"CALCUL_MENTAL","label":"Calcul mental","color":"#6c7bff"},
+  {"id":"CONVERSIONS","label":"Conversions","color":"#f2b705"},
+  {"id":"CARRE","label":"Carrés et racines","color":"#b86bff"},
+  {"id":"COMMERCE","label":"Commerce","color":"#2f9e5b"}
+ ],
+ "why":{
+  "near":"Réponse proche : refais ton calcul chiffre par chiffre.",
+  "off1":"Petite erreur de calcul (retenue ou chiffre décalé).",
+  "ten_up":"Tu as multiplié par 10 de trop : la virgule est mal placée.",
+  "ten_dn":"Tu as divisé par 10 de trop : la virgule est mal placée.",
+  "hund_up":"Tu as multiplié par 100 de trop.",
+  "hund_dn":"Tu as divisé par 100 de trop.",
+  "k_up":"Tu as multiplié par 1 000 de trop : vérifie le sens de la conversion.",
+  "k_dn":"Tu as divisé par 1 000 de trop : vérifie le sens de la conversion.",
+  "wrong_way":"Tu as converti dans le mauvais sens (multiplier au lieu de diviser, ou l’inverse).",
+  "eq_wrongOp":"Pour isoler x, il faut faire l’opération inverse (+ devient −, − devient +).",
+  "eq_sign":"Erreur de signe en passant un nombre de l’autre côté du signe =.",
+  "eq_noDiv":"Il reste à diviser par le nombre qui multiplie x.",
+  "eq_mult":"Tu as multiplié alors qu’il fallait diviser.",
+  "eq_div":"Tu as divisé alors qu’il fallait multiplier.",
+  "eq_dist":"Il faut distribuer : a(x + b) = ax + ab.",
+  "eq_side":"Regroupe les x d’un côté et les nombres de l’autre en changeant les signes.",
+  "pct_noDiv":"Tu as oublié de diviser par 100 : p % = p ÷ 100.",
+  "pct_div10":"Tu as divisé par 10 au lieu de 100.",
+  "pct_wrongDir":"Tu as fait l’inverse : une baisse se retire, une hausse s’ajoute.",
+  "pct_subP":"Tu as retiré le nombre p directement, pas p % du prix.",
+  "pct_amount":"C’est le montant de la remise, pas le nouveau prix.",
+  "pct_diff":"C’est la différence en euros, pas le pourcentage.",
+  "pct_badBase":"Mauvaise base : on compare toujours à la valeur de départ.",
+  "pct_coef":"C’est le coefficient multiplicateur, pas le taux en %.",
+  "pct_noRev":"Pour retrouver le prix de départ, on divise par le coefficient (on ne retire pas le %).",
+  "ord_ops":"Priorité des opérations : la multiplication passe avant l’addition.",
+  "ord_par":"Les parenthèses se calculent en premier.",
+  "sq_double":"n² = n × n, ce n’est pas n × 2.",
+  "sq_adj":"Tu as calculé le carré du nombre voisin.",
+  "sq_half":"La racine n’est pas la moitié : cherche n tel que n × n = le nombre.",
+  "sq_root":"Tu as calculé la racine alors qu’on demandait le carré (ou l’inverse).",
+  "tva_dir":"Pour passer du TTC au HT, on divise par 1,2 (on ne retire pas 20 %).",
+  "tva_add":"Tu as ajouté la TVA deux fois ou oublié de l’ajouter.",
+  "change":"Rendu de monnaie : somme donnée − prix à payer.",
+  "unit_price":"Prix de plusieurs articles : prix unitaire × quantité.",
+  "marge":"Marge = prix de vente − prix d’achat.",
+  "coef_rev":"Prix de vente = prix d’achat × coefficient multiplicateur."
+ },
+ "texts":{
+  "welcome":"Bienvenue dans Maths Snake, choisis un mode et prépare-toi à répondre aux questions",
+  "aboutTitle":"À propos",
+  "about":["Maths Snake est un jeu de calcul pour réviser les automatismes : équations, pourcentages, calcul mental, conversions, carrés, commerce.","Conduis ton serpent de cahiers jusqu’à la bonne réponse avant la fin du chrono.","Créé par Tom Rougeaud, professeur de maths-sciences. Licence CC BY-NC 4.0 : usage libre en classe, pas d’usage commercial.","Fichier unique et autonome : fonctionne sans internet, sans compte et sans serveur."],
+  "privTitle":"Confidentialité",
+  "priv":["Ce jeu ne collecte aucune donnée et n’en envoie aucune : tout reste dans ton navigateur.","Seuls sont enregistrés sur cet appareil (stockage local du navigateur) : tes réglages, ton prénom/classe si tu les saisis, ton meilleur score et l’historique de tes dernières parties (40 au maximum, pour le rapport).","Le rapport HTML est un fichier téléchargé par toi, sur ton appareil : rien n’est envoyé sur internet.","Tu peux exporter, importer ou effacer ces données avec les boutons ci-dessous."],
+  "rules":["Flèches ou Z Q S D (ou glisse le doigt)","Mange le cahier qui porte la bonne réponse","Erreur : −1 vie, serpent plus court et plus rapide","Prof, tables et meubles : le serpent rebondit"]
+ }
+}
 </script>
 
-
-
-<style>
-</style>
 <script>
-// your code goes here
-</script></body></html>
+(function(){
+'use strict';
+// Auteur : Tom Rougeaud
+/* =========================================================
+   0. NOYAU : constantes, utilitaires, stockage sûr, audio
+   ========================================================= */
+const APP='mathssnake', VER='v1', PFX=APP+'_'+VER+'_';
+const P=JSON.parse(document.getElementById('pedago').textContent);
+const WHY=P.why, TXT=P.texts, CHAPS=P.chapters;
+const CHAP_BY_ID={}; CHAPS.forEach(c=>CHAP_BY_ID[c.id]=c);
+const LINKEDIN='https://www.linkedin.com/in/tomrougeaud';
+
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rnd=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const pick=a=>a[rnd(0,a.length-1)];
+const lerp=(a,b,t)=>a+(b-a)*t;
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=rnd(0,i);[a[i],a[j]]=[a[j],a[i]];}return a;}
+function pad2(x){return String(x).padStart(2,'0');}
+function stampFR(d){d=d||new Date();return pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad2(d.getHours())+':'+pad2(d.getMinutes());}
+function fmt(n){ // nombre à la française : virgule décimale, espace fine pour les milliers
+  const r=Math.round(n*100)/100; const s=String(Math.abs(r)).split('.');
+  const ip=s[0].replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  return (r<0?'−':'')+ip+(s[1]?','+s[1]:'');
+}
+function safeFileName(s){return String(s||'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w\-\.]+/g,'_').replace(/^_+|_+$/g,'')||'joueur';}
+function csvCell(s){s=String(s==null?'':s).replace(/[\r\n]+/g,' ').replace(/"/g,'""');return '"'+s+'"';}
+function downloadBlob(text,mime,name){
+  try{const b=new Blob([text],{type:mime});const u=URL.createObjectURL(b);const a=document.createElement('a');
+    a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove();},800);return true;}
+  catch(e){return false;}
+}
+
+/* Stockage : try/catch + repli mémoire, clés préfixées application+version */
+const store=(function(){
+  const mem={};let ok=true;
+  try{const k=PFX+'t';localStorage.setItem(k,'1');localStorage.removeItem(k);}catch(e){ok=false;}
+  return{
+    get(k,def){try{if(ok){const v=localStorage.getItem(PFX+k);if(v!==null)return JSON.parse(v);}else if(k in mem)return mem[k];}catch(e){}return def;},
+    set(k,v){try{if(ok){localStorage.setItem(PFX+k,JSON.stringify(v));return;}}catch(e){}mem[k]=v;},
+    clearAll(){try{if(ok){Object.keys(localStorage).filter(x=>x.indexOf(PFX)===0).forEach(x=>localStorage.removeItem(x));}}catch(e){}for(const k in mem)delete mem[k];},
+    dump(){const o={};try{if(ok){Object.keys(localStorage).filter(x=>x.indexOf(PFX)===0).forEach(x=>{o[x.slice(PFX.length)]=JSON.parse(localStorage.getItem(x));});}}catch(e){}for(const k in mem)o[k]=mem[k];return o;},
+    persistent:ok
+  };
+})();
+
+/* Audio WebAudio procédural (aucun fichier) */
+const SFX=(function(){
+  let ac=null,muted=false;
+  function ensure(){try{if(!ac){const C=window.AudioContext||window.webkitAudioContext;if(C)ac=new C();}if(ac&&ac.state==='suspended')ac.resume();}catch(e){ac=null;}return ac;}
+  function tone(f,d,type,g,delay,slide){
+    if(muted)return;const a=ensure();if(!a)return;
+    try{const t=a.currentTime+(delay||0);const o=a.createOscillator(),v=a.createGain();
+      o.type=type||'sine';o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(30,slide),t+d);
+      v.gain.setValueAtTime(0.0001,t);v.gain.exponentialRampToValueAtTime(g||0.06,t+0.012);v.gain.exponentialRampToValueAtTime(0.0001,t+d);
+      o.connect(v);v.connect(a.destination);o.start(t);o.stop(t+d+0.02);}catch(e){}
+  }
+  return{
+    unlock:ensure,
+    setMuted(m){muted=!!m;},isMuted(){return muted;},
+    good(){tone(660,.10,'triangle',.07);tone(880,.10,'triangle',.07,.08);tone(1320,.16,'triangle',.06,.16);},
+    bad(){tone(240,.22,'sawtooth',.06,0,110);tone(160,.26,'square',.04,.1,80);},
+    pop(){tone(520,.06,'sine',.035,0,900);},
+    tick(){tone(1000,.04,'square',.025);},
+    level(){tone(523,.09,'triangle',.06);tone(659,.09,'triangle',.06,.09);tone(784,.09,'triangle',.06,.18);tone(1047,.2,'triangle',.06,.27);},
+    bump(){tone(140,.07,'sine',.05,0,70);},
+    over(){tone(392,.18,'triangle',.06);tone(330,.18,'triangle',.06,.18);tone(262,.4,'triangle',.06,.36);},
+    click(){tone(760,.05,'sine',.04);}
+  };
+})();
+
+/* =========================================================
+   1. MOTEUR DE QUESTIONS (partie 1) : fabrique + équations + pourcentages
+   Chaque gabarit renvoie {text, ans, unit, wrongs:[[valeur, cléPourquoi]], sol}
+   Les faux choix viennent de VRAIES erreurs d’élèves (voir WHY dans le JSON).
+   ========================================================= */
+function mk(text,ans,unit,wrongs,sol){return{text:text,ans:Math.round(ans*100)/100,unit:unit||'',wrongs:wrongs||[],sol:sol||''};}
+const GEN={};
+
+/* ---- ÉQUATIONS ---- */
+GEN.EQUATION=[
+ [ // niveau 1
+  ()=>{const x=rnd(4,40),a=rnd(3,20),b=x+a;return mk(`x + ${a} = ${b}`,x,'',[[b+a,'eq_wrongOp'],[b*a%97+1,'near']],`x = ${b} − ${a} = ${x}`);},
+  ()=>{const x=rnd(10,60),a=rnd(3,20),b=x-a;return mk(`x − ${a} = ${b}`,x,'',[[b-a,'eq_wrongOp']],`x = ${b} + ${a} = ${x}`);},
+  ()=>{const x=rnd(4,40),a=rnd(3,20),b=x+a;return mk(`${a} + x = ${b}`,x,'',[[b+a,'eq_wrongOp']],`x = ${b} − ${a} = ${x}`);}
+ ],
+ [ // niveau 2
+  ()=>{const a=rnd(2,9),x=rnd(3,12),b=a*x;return mk(`${a}x = ${b}`,x,'',[[b*a,'eq_mult'],[b-a,'eq_wrongOp'],[b+a,'eq_wrongOp']],`x = ${b} ÷ ${a} = ${x}`);},
+  ()=>{const a=rnd(2,9),b=rnd(3,12),x=a*b;return mk(`x ÷ ${a} = ${b}`,x,'',[[b/a,'eq_div'],[b+a,'eq_wrongOp'],[b-a,'eq_wrongOp']],`x = ${b} × ${a} = ${x}`);}
+ ],
+ [ // niveau 3
+  ()=>{const a=rnd(2,9),x=rnd(3,15),b=rnd(3,25),c=a*x+b;return mk(`${a}x + ${b} = ${c}`,x,'',[[(c+b)/a,'eq_sign'],[c-b,'eq_noDiv'],[(c-b)*a,'eq_mult']],`${a}x = ${c} − ${b} = ${c-b}, donc x = ${x}`);},
+  ()=>{const a=rnd(2,9),x=rnd(4,15),b=rnd(3,25),c=a*x-b;return mk(`${a}x − ${b} = ${c}`,x,'',[[(c-b)/a,'eq_sign'],[c+b,'eq_noDiv'],[(c+b)*a,'eq_mult']],`${a}x = ${c} + ${b} = ${c+b}, donc x = ${x}`);}
+ ],
+ [ // niveau 4
+  ()=>{const a=rnd(2,8),x=rnd(3,15),b=rnd(2,9),c=a*(x+b);return mk(`${a}(x + ${b}) = ${c}`,x,'',[[c/a+b,'eq_sign'],[(c-b)/a,'eq_dist'],[c-b,'eq_dist']],`x + ${b} = ${c} ÷ ${a} = ${c/a}, donc x = ${x}`);},
+  ()=>{const c=rnd(2,5),a=c+rnd(2,5),x=rnd(3,15),b=rnd(2,15),d=(a-c)*x+b;return mk(`${a}x + ${b} = ${c}x + ${d}`,x,'',[[(d+b)/(a-c),'eq_side'],[(d-b)/(a+c),'eq_side'],[d-b,'eq_noDiv']],`${a-c}x = ${d} − ${b} = ${d-b}, donc x = ${x}`);}
+ ],
+ [ // niveau 5
+  ()=>{const a=rnd(2,6),c=rnd(2,6),x=rnd(3,14),b=rnd(2,12),d=(a*x+b)/c;if(d!==Math.floor(d))return null;return mk(`(${a}x + ${b}) ÷ ${c} = ${d}`,x,'',[[(d-b)/a,'eq_mult'],[(d*c+b)/a,'eq_sign'],[d*c-b,'eq_noDiv']],`${a}x + ${b} = ${d} × ${c} = ${d*c}, donc x = ${x}`);},
+  ()=>{const a=rnd(2,7),x=rnd(3,12),b=rnd(2,9),e=rnd(2,15),r=a*(x-b)+e;return mk(`${a}(x − ${b}) + ${e} = ${r}`,x,'',[[(r-e)/a-b,'eq_sign'],[(r+e)/a+b,'eq_sign'],[(r-e)/a,'eq_dist']],`${a}(x − ${b}) = ${r-e}, x − ${b} = ${(r-e)/a}, donc x = ${x}`);},
+  ()=>{const c=rnd(2,5),a=c+rnd(2,6),x=rnd(-12,-2),b=rnd(5,30),d=(a-c)*x+b;return mk(`${a}x + ${b} = ${c}x + ${d}`.replace('+ -','− '),x,'',[[-x,'eq_sign'],[(d-b)/(a+c),'eq_side'],[d-b,'eq_noDiv']],`${a-c}x = ${d} − ${b} = ${d-b}, donc x = ${x}`);}
+ ]
+];
+
+/* ---- POURCENTAGES ---- */
+GEN.POURCENTAGES=[
+ [ // niveau 1 : p % de n (10, 25, 50...)
+  ()=>{const p=pick([10,50,25,20]),n=pick([20,40,60,80,100,120,200,400]),a=p*n/100;return mk(`${p} % de ${n} = ?`,a,'',[[p*n,'pct_noDiv'],[p*n/10,'pct_div10'],[n-a,'pct_wrongDir']],`${p} % de ${n} = ${n} × ${p} ÷ 100 = ${fmt(a)}`);}
+ ],
+ [ // niveau 2
+  ()=>{const p=pick([5,15,30,40,60,75,80]),n=20*rnd(2,15),a=p*n/100;return mk(`${p} % de ${n} = ?`,a,'',[[p*n,'pct_noDiv'],[p*n/10,'pct_div10'],[n-a,'pct_wrongDir']],`${p} % de ${n} = ${n} × ${p} ÷ 100 = ${fmt(a)}`);},
+  ()=>{const p=pick([10,20,25,50]),a=rnd(3,30)*(p===25?4:p===20?5:10)*p/100;const n=a*100/p;return mk(`${p} % de ${fmt(n)} = ?`,a,'',[[n*p,'pct_noDiv'],[n*p/10,'pct_div10']],`${fmt(n)} × ${p} ÷ 100 = ${fmt(a)}`);}
+ ],
+ [ // niveau 3 : prix après remise / hausse
+  ()=>{const n=10*rnd(3,20),p=pick([10,20,25,30,40,50]),m=n*p/100,r=n-m;return mk(`Un article coûte ${n} €.\nRemise de ${p} %. Nouveau prix ?`,r,'€',[[m,'pct_amount'],[n+m,'pct_wrongDir'],[n-p,'pct_subP']],`Remise : ${n} × ${p} ÷ 100 = ${fmt(m)} €. Prix : ${n} − ${fmt(m)} = ${fmt(r)} €`);},
+  ()=>{const n=10*rnd(3,20),p=pick([10,20,25,30,50]),m=n*p/100,r=n+m;return mk(`Un article coûte ${n} €.\nHausse de ${p} %. Nouveau prix ?`,r,'€',[[m,'pct_amount'],[n-m,'pct_wrongDir'],[n+p,'pct_subP']],`Hausse : ${n} × ${p} ÷ 100 = ${fmt(m)} €. Prix : ${n} + ${fmt(m)} = ${fmt(r)} €`);}
+ ],
+ [ // niveau 4 : taux d'évolution, TVA
+  ()=>{const A=20*rnd(3,15),p=pick([5,10,15,20,25,50]),up=Math.random()<.6,B=A*(1+(up?1:-1)*p/100);if(B!==Math.round(B*100)/100)return null;
+    return mk(`Un prix passe de ${A} € à ${fmt(B)} €.\nTaux de ${up?'hausse':'baisse'} en % ?`,p,'%',[[Math.abs(B-A),'pct_diff'],[Math.round(100*Math.abs(B-A)/B),'pct_badBase'],[Math.round(100*B/A),'pct_ratio']],`(${fmt(Math.max(A,B))} − ${fmt(Math.min(A,B))}) ÷ ${A} = ${fmt(Math.abs(B-A)/A)} = ${p} %`);},
+  ()=>{const h=10*rnd(5,40),t=h*0.2;return mk(`Prix HT : ${h} €. TVA : 20 %.\nPrix TTC ?`,h+t,'€',[[t,'pct_amount'],[h+20,'tva_add'],[h*1.2*1.2,'tva_add']],`TVA : ${h} × 0,2 = ${fmt(t)} €. TTC : ${h} + ${fmt(t)} = ${fmt(h+t)} €`);}
+ ],
+ [ // niveau 5 : retrouver la valeur de départ
+  ()=>{const n=20*rnd(3,25),p=pick([5,10,20,25,50]),X=n*(1+p/100);return mk(`Après une hausse de ${p} %, un prix vaut ${fmt(X)} €.\nPrix de départ ?`,n,'€',[[X*(1-p/100),'pct_noRev'],[X-p,'pct_subP'],[X*p/100,'pct_amount']],`${fmt(X)} ÷ ${fmt(1+p/100)} = ${n} €`);},
+  ()=>{const h=25*rnd(2,24),T=h*1.2;return mk(`Un article coûte ${fmt(T)} € TTC (TVA 20 %).\nPrix HT ?`,h,'€',[[T*0.8,'tva_dir'],[T-20,'pct_subP'],[T*0.2,'pct_amount']],`${fmt(T)} ÷ 1,2 = ${h} €`);},
+  ()=>{const n=20*rnd(3,25),p=pick([10,20,25,50]),X=n*(1-p/100);return mk(`Après une baisse de ${p} %, un prix vaut ${fmt(X)} €.\nPrix de départ ?`,n,'€',[[X*(1+p/100),'pct_noRev'],[X+p,'pct_subP'],[X*p/100,'pct_amount']],`${fmt(X)} ÷ ${fmt(1-p/100)} = ${n} €`);}
+ ]
+];
+
+/* ---- CALCUL MENTAL ---- */
+function offs(a){return[[a+10,'off1'],[a-10,'off1'],[a+1,'off1'],[a-1,'off1']];}
+GEN.CALCUL_MENTAL=[
+ [ // niveau 1
+  ()=>{const a=rnd(8,45),b=rnd(6,40);return mk(`${a} + ${b} = ?`,a+b,'',offs(a+b),`${a} + ${b} = ${a+b}`);},
+  ()=>{const b=rnd(6,35),a=b+rnd(8,40);return mk(`${a} − ${b} = ?`,a-b,'',offs(a-b),`${a} − ${b} = ${a-b}`);},
+  ()=>{const a=rnd(2,5),b=rnd(3,9);return mk(`${a} × ${b} = ?`,a*b,'',[[a*b+a,'near'],[a*b-a,'near'],[a+b,'sq_double'],[a*b+b,'near']],`${a} × ${b} = ${a*b}`);}
+ ],
+ [ // niveau 2
+  ()=>{const a=rnd(27,69),b=rnd(15,49);return mk(`${a} + ${b} = ?`,a+b,'',offs(a+b),`${a} + ${b} = ${a+b}`);},
+  ()=>{const a=rnd(6,9),b=rnd(6,9);return mk(`${a} × ${b} = ?`,a*b,'',[[a*b+a,'near'],[a*b-a,'near'],[a*b+b,'near'],[a*b-b,'near']],`${a} × ${b} = ${a*b}`);},
+  ()=>{const a=rnd(12,98);return mk(`Le double de ${a} = ?`,2*a,'',[[a+2,'near'],[2*a+10,'off1'],[2*a-10,'off1']],`${a} × 2 = ${2*a}`);},
+  ()=>{const a=2*rnd(14,60);return mk(`La moitié de ${a} = ?`,a/2,'',[[a*2,'eq_mult'],[a/2+10,'off1'],[a/2-10,'off1'],[a-2,'near']],`${a} ÷ 2 = ${a/2}`);}
+ ],
+ [ // niveau 3
+  ()=>{const a=rnd(11,15),b=rnd(3,9);return mk(`${a} × ${b} = ?`,a*b,'',[[a*b+b,'near'],[a*b-b,'near'],[a*b+10,'off1'],[a*b-10,'off1']],`${a} × ${b} = ${a*b}`);},
+  ()=>{const b=rnd(3,9),a=b*rnd(6,14);return mk(`${a} ÷ ${b} = ?`,a/b,'',[[a/b+1,'near'],[a/b-1,'near'],[a-b,'eq_div'],[a/b+10,'off1']],`${a} ÷ ${b} = ${a/b}`);},
+  ()=>{const a=rnd(12,88);return mk(`${a} + ? = 100`,100-a,'',[[a,'near'],[100-a+10,'off1'],[100-a-10,'off1'],[100+a,'eq_wrongOp']],`100 − ${a} = ${100-a}`);},
+  ()=>{const a=rnd(4,9),b=10*rnd(3,12);return mk(`${a} × ${b} = ?`,a*b,'',[[a*b/10,'ten_dn'],[a*b*10,'ten_up'],[a*b+10,'off1']],`${a} × ${b/10} = ${a*b/10}, puis × 10 = ${a*b}`);}
+ ],
+ [ // niveau 4
+  ()=>{const a=rnd(3,9),b=rnd(3,9),c=rnd(6,40);return mk(`${a} × ${b} + ${c} = ?`,a*b+c,'',[[a*(b+c),'ord_ops'],[(a+b)*c,'ord_ops'],[a*b-c,'near'],[a*b+c+10,'off1']],`${a} × ${b} = ${a*b}, puis + ${c} = ${a*b+c}`);},
+  ()=>{const a=rnd(3,9),b=rnd(3,9),c=rnd(3,9);return mk(`(${a} + ${b}) × ${c} = ?`,(a+b)*c,'',[[a+b*c,'ord_par'],[a*c+b,'ord_par'],[(a+b)*c+c,'near'],[(a+b)*c-c,'near']],`${a} + ${b} = ${a+b}, puis × ${c} = ${(a+b)*c}`);},
+  ()=>{const a=rnd(12,30),b=rnd(3,9),c=rnd(5,30);return mk(`${a} × ${b} − ${c} = ?`,a*b-c,'',[[a*(b-c),'ord_ops'],[a*b+c,'near'],[a*b-c+10,'off1'],[a*b-c-10,'off1']],`${a} × ${b} = ${a*b}, puis − ${c} = ${a*b-c}`);}
+ ],
+ [ // niveau 5
+  ()=>{const a=rnd(12,19),b=rnd(12,19);return mk(`${a} × ${b} = ?`,a*b,'',[[a*b+10,'off1'],[a*b-10,'off1'],[a*b+a,'near'],[a*b-b,'near'],[a*b+100,'off1']],`${a} × ${b} = ${a*b}`);},
+  ()=>{const a=rnd(3,9),b=rnd(3,9),c=rnd(3,9),d=rnd(3,9);return mk(`${a} × ${b} + ${c} × ${d} = ?`,a*b+c*d,'',[[a*(b+c)*d,'ord_ops'],[a*b+c+d,'ord_ops'],[a*b+c*d+10,'off1'],[a*b+c*d-10,'off1']],`${a*b} + ${c*d} = ${a*b+c*d}`);},
+  ()=>{const k=rnd(2,9);return mk(`25 × ${4*k} = ?`,100*k,'',[[100*k+25,'near'],[100*k-25,'near'],[10*k,'ten_dn'],[1000*k,'ten_up']],`25 × 4 = 100, donc 25 × ${4*k} = 100 × ${k} = ${100*k}`);},
+  ()=>{const a=rnd(3,9),b=rnd(2,6),c=rnd(2,9),d=rnd(3,9);const v=(a+b)*c-d;return mk(`(${a} + ${b}) × ${c} − ${d} = ?`,v,'',[[a+b*c-d,'ord_par'],[(a+b)*(c-d),'ord_par'],[v+10,'off1'],[v-10,'off1']],`${a+b} × ${c} = ${(a+b)*c}, puis − ${d} = ${v}`);},
+  ()=>{const a=rnd(3,9);return mk(`99 × ${a} = ?`,99*a,'',[[100*a,'near'],[100*a+a,'near'],[99*a+10,'off1'],[99*a-10,'off1']],`100 × ${a} − ${a} = ${99*a}`);}
+ ]
+];
+
+/* ---- CONVERSIONS ---- */
+function shifts(a){return[[a*10,'ten_up'],[a/10,'ten_dn'],[a*100,'hund_up'],[a/100,'hund_dn'],[a*1000,'k_up'],[a/1000,'k_dn']];}
+GEN.CONVERSIONS=[
+ [ // niveau 1
+  ()=>{const k=rnd(2,9);return mk(`${k} kg = ? g`,k*1000,'g',shifts(k*1000),`1 kg = 1 000 g, donc ${k} kg = ${fmt(k*1000)} g`);},
+  ()=>{const k=rnd(2,9);return mk(`${fmt(k*1000)} g = ? kg`,k,'kg',shifts(k),`1 000 g = 1 kg, donc ${fmt(k*1000)} g = ${k} kg`);},
+  ()=>{const c=100*rnd(2,9);return mk(`${c} cm = ? m`,c/100,'m',shifts(c/100),`100 cm = 1 m, donc ${c} cm = ${c/100} m`);},
+  ()=>{const m=rnd(2,9);return mk(`${m} m = ? cm`,m*100,'cm',shifts(m*100),`1 m = 100 cm, donc ${m} m = ${m*100} cm`);}
+ ],
+ [ // niveau 2
+  ()=>{const L=rnd(2,9);return mk(`${L} L = ? mL`,L*1000,'mL',shifts(L*1000),`1 L = 1 000 mL`);},
+  ()=>{const L=rnd(2,9);return mk(`${fmt(L*1000)} mL = ? L`,L,'L',shifts(L),`1 000 mL = 1 L`);},
+  ()=>{const k=rnd(2,9);return mk(`${k} km = ? m`,k*1000,'m',shifts(k*1000),`1 km = 1 000 m`);},
+  ()=>{const k=rnd(2,9);return mk(`${fmt(k*1000)} m = ? km`,k,'km',shifts(k),`1 000 m = 1 km`);}
+ ],
+ [ // niveau 3 : avec décimales
+  ()=>{const g=rnd(12,95)*100;return mk(`${fmt(g)} g = ? kg`,g/1000,'kg',shifts(g/1000),`${fmt(g)} ÷ 1 000 = ${fmt(g/1000)} kg`);},
+  ()=>{const c=rnd(15,95)*10;return mk(`${c} cm = ? m`,c/100,'m',shifts(c/100),`${c} ÷ 100 = ${fmt(c/100)} m`);},
+  ()=>{const m=pick([450,750,1250,2300,3600,4800]);return mk(`${fmt(m)} mL = ? L`,m/1000,'L',shifts(m/1000),`${fmt(m)} ÷ 1 000 = ${fmt(m/1000)} L`);},
+  ()=>{const h=pick([0.5,1.5,2.5,0.25,0.75,1.25]);return mk(`${fmt(h)} h = ? min`,h*60,'min',[[h*100,'time100'],[h*10,'time100'],[h*60+10,'off1'],[h*60-10,'off1']],`${fmt(h)} × 60 = ${h*60} min`);}
+ ],
+ [ // niveau 4
+  ()=>{const m=pick([15,30,45,90,135,150,75]);return mk(`${m} min = ? h`,m/60,'h',[[m/100,'time100'],[m/10,'time100'],[m/60*10,'ten_up'],[Math.round(m/60*100)/100+0.5,'near']],`${m} ÷ 60 = ${fmt(m/60)} h`);},
+  ()=>{const h=rnd(1,4),m=pick([10,15,20,30,45]);return mk(`${h} h ${m} min = ? min`,h*60+m,'min',[[h*100+m,'time100'],[h*60,'near'],[h*60+m+10,'off1'],[h*10+m,'time100']],`${h} × 60 + ${m} = ${h*60+m} min`);},
+  ()=>{const L=pick([0.25,0.75,1.5,2.5,0.5]);return mk(`${fmt(L)} L = ? mL`,L*1000,'mL',shifts(L*1000),`${fmt(L)} × 1 000 = ${fmt(L*1000)} mL`);},
+  ()=>{const k=pick([1.5,2.5,3.2,4.8,0.6]);return mk(`${fmt(k)} km = ? m`,k*1000,'m',shifts(k*1000),`${fmt(k)} × 1 000 = ${fmt(k*1000)} m`);}
+ ],
+ [ // niveau 5
+  ()=>{const v=pick([36,54,72,90,108]);return mk(`${v} km/h = ? m/s`,v/3.6,'m/s',[[v*3.6,'speed'],[v/36,'ten_dn'],[v/3,'speed'],[v/3.6+5,'near']],`${v} ÷ 3,6 = ${fmt(v/3.6)} m/s`);},
+  ()=>{const m=rnd(2,9);return mk(`${m} m² = ? cm²`,m*10000,'cm²',[[m*100,'wrong_way'],[m*1000,'wrong_way'],[m*100000,'wrong_way'],[m*10,'wrong_way']],`1 m² = 100 × 100 = 10 000 cm²`);},
+  ()=>{const h=rnd(1,3),m=pick([5,15,25,40,50]);return mk(`${h} h ${m} min = ? min`,h*60+m,'min',[[h*100+m,'time100'],[h*60,'near'],[h*60+m+10,'off1'],[h*60+m-10,'off1']],`${h} × 60 + ${m} = ${h*60+m} min`);},
+  ()=>{const s=pick([90,150,210,270,330]);return mk(`${s} s = ? min`,s/60,'min',[[s/100,'time100'],[s/10,'time100'],[s/60+1,'near'],[s/60-1,'near']],`${s} ÷ 60 = ${fmt(s/60)} min`);}
+ ]
+];
+
+/* ---- CARRÉS ET RACINES ---- */
+function sqW(n){return[[n*2,'sq_double'],[(n+1)*(n+1),'sq_adj'],[(n-1)*(n-1),'sq_adj'],[n*n+10,'off1'],[n*n-10,'off1'],[n*n+n,'near']];}
+function rtW(n){const N=n*n;return[[N/2,'sq_half'],[n+1,'near'],[n-1,'near'],[N/10,'sq_half'],[n*2,'sq_root']];}
+GEN.CARRE=[
+ [ ()=>{const n=rnd(2,12);return mk(`${n}² = ?`,n*n,'',sqW(n),`${n}² = ${n} × ${n} = ${n*n}`);} ],
+ [ ()=>{const n=rnd(10,15);return mk(`${n}² = ?`,n*n,'',sqW(n),`${n}² = ${n} × ${n} = ${n*n}`);},
+   ()=>{const n=rnd(3,10);return mk(`√${n*n} = ?`,n,'',rtW(n),`${n} × ${n} = ${n*n}, donc √${n*n} = ${n}`);} ],
+ [ ()=>{const n=rnd(16,25);return mk(`${n}² = ?`,n*n,'',sqW(n),`${n}² = ${n} × ${n} = ${n*n}`);},
+   ()=>{const n=rnd(10,20);return mk(`√${n*n} = ?`,n,'',rtW(n),`${n} × ${n} = ${n*n}, donc √${n*n} = ${n}`);} ],
+ [ ()=>{const n=10*rnd(2,9);return mk(`${n}² = ?`,n*n,'',[[n*2,'sq_double'],[n*n/10,'ten_dn'],[n*n*10,'ten_up']],`${n/10}² = ${n*n/100}, puis × 100 = ${n*n}`);},
+   ()=>{const n=rnd(4,15);return mk(`Un carré a pour côté ${n} cm.\nSon aire en cm² ?`,n*n,'cm²',[[4*n,'sq_double'],[n*2,'sq_double'],[(n+1)*(n+1),'sq_adj']],`aire = côté × côté = ${n} × ${n} = ${n*n} cm²`);},
+   ()=>{const n=rnd(11,25);return mk(`√${n*n} = ?`,n,'',rtW(n),`${n} × ${n} = ${n*n}, donc √${n*n} = ${n}`);} ],
+ [ ()=>{const n=rnd(26,35);return mk(`${n}² = ?`,n*n,'',sqW(n),`${n}² = ${n} × ${n} = ${n*n}`);},
+   ()=>{const n=rnd(5,12);return mk(`Un carré a pour aire ${n*n} m².\nQuelle est la longueur de son côté (en m) ?`,n,'m',[[n*n/2,'sq_half'],[n*2,'sq_root'],[n+1,'near'],[n-1,'near']],`côté = √${n*n} = ${n} m`);},
+   ()=>{const n=rnd(2,9);return mk(`${n}² + ${n+1}² = ?`,n*n+(n+1)*(n+1),'',[[(2*n+1)*(2*n+1),'sq_adj'],[n*n+n+1,'sq_double'],[n*n+(n+1)*(n+1)+10,'off1'],[n*n+(n+1)*(n+1)-10,'off1']],`${n*n} + ${(n+1)*(n+1)} = ${n*n+(n+1)*(n+1)}`);} ]
+];
+
+/* ---- COMMERCE ---- */
+GEN.COMMERCE=[
+ [ // niveau 1 : rendu de monnaie
+  ()=>{const give=pick([10,20,50]),pr=rnd(3,give-3)+pick([0,0.5]);const r=give-pr;return mk(`Un article coûte ${fmt(pr)} €.\nLe client donne ${give} €. Monnaie à rendre ?`,r,'€',[[give+pr,'change'],[pr,'change'],[r+1,'off1'],[r-1,'off1']],`${give} − ${fmt(pr)} = ${fmt(r)} €`);}
+ ],
+ [ // niveau 2 : plusieurs articles
+  ()=>{const n=rnd(3,9),p=pick([2,3,4,5,6,8,12]);return mk(`${n} articles à ${p} € pièce.\nTotal à payer ?`,n*p,'€',[[n+p,'unit_price'],[n*p+p,'near'],[n*p-p,'near'],[n*p+10,'off1']],`${n} × ${p} = ${n*p} €`);},
+  ()=>{const n=rnd(3,6),p=pick([2.5,3.5,4.5,1.5,6.5]);return mk(`${n} articles à ${fmt(p)} € pièce.\nTotal à payer ?`,n*p,'€',[[n+p,'unit_price'],[n*p+1,'off1'],[n*p-1,'off1'],[n*p*10,'ten_up']],`${n} × ${fmt(p)} = ${fmt(n*p)} €`);}
+ ],
+ [ // niveau 3 : prix à l'unité / remise
+  ()=>{const n=pick([4,5,6,8,10]),u=pick([2,3,4,5]),tot=n*u;return mk(`Un lot de ${n} stylos coûte ${tot} €.\nPrix d’un stylo ?`,u,'€',[[tot*n,'unit_price'],[tot-n,'unit_price'],[tot+n,'unit_price']],`${tot} ÷ ${n} = ${u} €`);},
+  ()=>{const n=20*rnd(2,12),p=pick([10,25,50]),m=n*p/100;return mk(`Un article à ${n} €.\nRemise de ${p} %. Prix à payer ?`,n-m,'€',[[m,'pct_amount'],[n+m,'pct_wrongDir'],[n-p,'pct_subP']],`${n} − ${fmt(m)} = ${fmt(n-m)} €`);}
+ ],
+ [ // niveau 4 : TVA, marge
+  ()=>{const a=rnd(5,40)*5,v=a+rnd(2,16)*5;return mk(`Prix d’achat : ${a} €.\nPrix de vente : ${v} €. Marge ?`,v-a,'€',[[v+a,'marge'],[a-v>0?a-v:v/a,'marge'],[v-a+5,'off1'],[v-a-5,'off1']],`${v} − ${a} = ${v-a} €`);},
+  ()=>{const h=10*rnd(4,30);return mk(`Prix HT : ${h} €. TVA 20 %.\nPrix TTC ?`,h*1.2,'€',[[h*0.2,'pct_amount'],[h+20,'tva_add'],[h*0.8,'tva_dir']],`${h} × 1,2 = ${fmt(h*1.2)} €`);}
+ ],
+ [ // niveau 5 : coefficient, taux de marge, panier
+  ()=>{const a=20*rnd(2,12),k=pick([1.25,1.5,2]);return mk(`Prix d’achat : ${a} €.\nCoefficient multiplicateur : ${fmt(k)}.\nPrix de vente ?`,a*k,'€',[[a+k,'coef_rev'],[a*(k-1),'coef_rev'],[a/k,'coef_rev']],`${a} × ${fmt(k)} = ${fmt(a*k)} €`);},
+  ()=>{const a=pick([40,50,80,100,200]),m=pick([10,20,25,50]),mm=a*m/100;if(a+mm!==Math.round(a+mm))return null;return mk(`Achat : ${a} €. Vente : ${fmt(a+mm)} €.\nTaux de marge (marge ÷ achat) en % ?`,m,'%',[[mm,'pct_diff'],[Math.round(100*mm/(a+mm)),'pct_badBase'],[Math.round((a+mm)/a*100),'pct_coef']],`marge = ${fmt(mm)} €, ${fmt(mm)} ÷ ${a} = ${m/100} soit ${m} %`);},
+  ()=>{const n=rnd(12,45),p=pick([4,5,6,8,12]),r=pick([20,50]);return mk(`${n} clients achètent chacun un article à ${p} €.\nChiffre d’affaires du jour ?`,n*p,'€',[[n+p,'unit_price'],[n*p+r,'near'],[n*p-r,'near'],[n*p*10,'ten_up']],`${n} × ${p} = ${n*p} €`);}
+ ]
+];
+
+/* ---- Fabrication des 4 réponses (1 bonne + 3 fausses plausibles, distinctes) ---- */
+function r2(v){return Math.round(v*100)/100;}
+function decs(v){const s=String(r2(v));const i=s.indexOf('.');return i<0?0:s.length-i-1;}
+function buildChoices(q){
+  const A=q.ans,intOnly=(q.chap==='EQUATION'||q.chap==='CALCUL_MENTAL'||q.chap==='CARRE');
+  const seen=new Set([A]);const out=[];const usedWhy=new Set();
+  function ok(v){
+    if(!isFinite(v))return false;v=r2(v);
+    if(seen.has(v))return false;
+    if(intOnly&&!Number.isInteger(v))return false;
+    if(decs(v)>2)return false;
+    if(A>=0&&v<0&&!(q.chap==='EQUATION'&&q.level>=5))return false;
+    const lim=q.chap==='CONVERSIONS'?1000:25;
+    if(Math.abs(v)>(q.chap==='CONVERSIONS'?60000:9999999))return false;
+    if(A!==0&&v!==0&&(Math.abs(v)>Math.abs(A)*lim||Math.abs(v)<Math.abs(A)/lim))return false;
+    if(A>=1&&v===0)return false;
+    return true;
+  }
+  const cand=shuffle(q.wrongs.filter(w=>w&&w[1]!=='near'));
+  const take=(v,why)=>{v=r2(v);seen.add(v);out.push({v:v,why:why});usedWhy.add(why);};
+  cand.forEach(w=>{if(out.length<3&&ok(w[0])&&!usedWhy.has(w[1]))take(w[0],w[1]);});
+  cand.forEach(w=>{if(out.length<3&&ok(w[0]))take(w[0],w[1]);});
+  if(out.length<3){
+    const steps=intOnly||Number.isInteger(A)?[1,2,10,5,20]:[0.5,1,2,0.1,10];
+    const g=[];steps.forEach(s=>{g.push(A+s,A-s);});
+    shuffle(g).forEach(v=>{if(out.length<3&&ok(v))take(v,Math.abs(v-A)>=10?'off1':'near');});
+  }
+  if(out.length<3){for(let k=1;k<60&&out.length<3;k++){if(ok(A+k))take(A+k,'near');if(out.length<3&&ok(A-k))take(A-k,'near');}}
+  return out.length===3?out:null;
+}
+
+/* ---- Tirage d’une question : variété + mémoire anti-répétition ---- */
+const recentSig=[];
+function makeQuestion(chapSel,level){
+  const ids=CHAPS.map(c=>c.id);
+  for(let t=0;t<60;t++){
+    const chap=Array.isArray(chapSel)?pick(chapSel):(chapSel==='TOUS'?pick(ids):chapSel);
+    let lv=clamp(level,1,5);if(lv>2&&Math.random()<0.22)lv--;
+    const f=pick(GEN[chap][lv-1]);let q=null;
+    try{q=f();}catch(e){q=null;}
+    if(!q)continue;
+    const sig=chap+'|'+q.text;
+    if(t<50&&recentSig.indexOf(sig)>=0)continue;
+    q.chap=chap;q.level=lv;q.sig=sig;
+    const ch=buildChoices(q);if(!ch)continue;
+    const all=ch.concat([{v:q.ans,why:null}]);
+    q.choices=shuffle(all).map(c=>({v:c.v,ok:c.why===null,why:c.why}));
+    recentSig.push(sig);if(recentSig.length>45)recentSig.shift();
+    return q;
+  }
+  return {chap:'CALCUL_MENTAL',level:1,text:'7 × 8 = ?',ans:56,unit:'',sol:'7 × 8 = 56',sig:'fb',choices:shuffle([{v:56,ok:true},{v:54,ok:false,why:'near'},{v:48,ok:false,why:'near'},{v:63,ok:false,why:'near'}])};
+}
+WHY.time100='Une heure = 60 minutes, pas 100 : ne divise pas par 100.';
+WHY.pct_ratio='B ÷ A donne le coefficient (en %) : le taux d’évolution, c’est cet écart par rapport à 100 %.';
+WHY.speed='Pour passer de km/h à m/s, on divise par 3,6.';
+
+/* =========================================================
+   2. MONDE : canvas, grille, salle de classe, obstacles
+   Tout est aligné sur la grille (cases). Les réponses occupent 2×2 cases.
+   ========================================================= */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const cap=document.getElementById('cap');
+let W=800,H=600,DPR=1,CELL=20,COLS=30,ROWS=20,tbRows=2,bdRows=4,r0=6;
+const L={tables:[],furn:[],prof:null,bubble:null,board:null,blk:null,safe:[],students:[],tw:4,th:2,fw:2};
+const DIRS=[{x:1,y:0},{x:0,y:1},{x:-1,y:0},{x:0,y:-1}];
+const sameDir=(a,b)=>a.x===b.x&&a.y===b.y;
+const oppDir=(a,b)=>a.x===-b.x&&a.y===-b.y;
+
+function buildWorld(){
+  COLS=W>=900?36:(W>=640?30:20);
+  CELL=Math.max(10,Math.floor(W/COLS));
+  ROWS=Math.max(12,Math.floor(H/CELL));
+  tbRows=CELL>=36?1:Math.ceil(50/CELL);
+  bdRows=clamp(Math.round((ROWS-tbRows)*0.25),5,10);
+  r0=tbRows+bdRows;
+  const wide=COLS>=30;
+  const fw=wide?2:1,corr=wide?3:2,gap=3;
+  L.fw=fw;
+  L.blk=new Uint8Array(COLS*ROWS);
+  for(let y=0;y<r0;y++)for(let x=0;x<COLS;x++)L.blk[y*COLS+x]=1;
+  // professeur 2×2 centré sous le tableau
+  L.prof={x:Math.floor(COLS/2)-1,y:r0,w:2,h:2};
+  // bulle (obstacle dynamique) à droite du prof
+  const bw=wide?6:7;
+  L.bubble={x:L.prof.x+3,y:r0,w:bw,h:2};
+  // tables 3×3
+  const innerL=1+fw+corr,innerW=COLS-2-2*fw-2*corr;
+  const tw=Math.max(2,Math.floor((innerW-2*gap)/3));
+  const tRow0=r0+3,rowsAvail=ROWS-1-tRow0;
+  const th=clamp(Math.floor((rowsAvail-4)/3),2,4);
+  const rg=clamp(Math.floor((rowsAvail-3*th)/2),2,4);
+  const totW=3*tw+2*gap,tx0=innerL+Math.max(0,Math.floor((innerW-totW)/2));
+  L.tw=tw;L.th=th;L.tables=[];L.students=[];
+  for(let j=0;j<3;j++)for(let i=0;i<3;i++){
+    L.tables.push({x:tx0+i*(tw+gap),y:tRow0+j*(th+rg),w:tw,h:th});
+  }
+  const totH=3*th+2*rg;
+  L.furn=[{x:1,y:tRow0,w:fw,h:totH,side:'L'},{x:COLS-1-fw,y:tRow0,w:fw,h:totH,side:'R'}];
+  const mark=r=>{for(let y=r.y;y<r.y+r.h;y++)for(let x=r.x;x<r.x+r.w;x++)if(x>=0&&x<COLS&&y>=0&&y<ROWS)L.blk[y*COLS+x]=1;};
+  L.tables.forEach(mark);L.furn.forEach(mark);mark(L.prof);
+  // élèves : un banc de 2 élèves par table (tw cases) — apparence fixe par graine
+  L.tables.forEach((t,ti)=>{
+    const n=t.w>=5?2:1;
+    for(let k=0;k<n;k++)L.students.push({t:ti,k:k,n:n,seed:(ti*7+k*3+1)});
+  });
+  // tableau : rectangle en pixels
+  L.board={x:2*CELL,y:tbRows*CELL+CELL*0.25,w:(COLS-4)*CELL,h:bdRows*CELL-CELL*0.35};
+  computeSafeBlocks();
+}
+const inRect=(r,x,y)=>x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h;
+const isSolid=(x,y)=>L.blk[y*COLS+x]===1;
+function bubbleOn(x,y){return R&&R.bubbleT>0&&inRect(L.bubble,x,y);}
+
+/* BFS (avec wrap horizontal + vertical dans la zone jouable) */
+function wrapCell(x,y){if(x<0)x=COLS-1;else if(x>=COLS)x=0;if(y<r0)y=ROWS-1;else if(y>=ROWS)y=r0;return{x:x,y:y};}
+function bfsDist(sx,sy){
+  const d=new Int16Array(COLS*ROWS).fill(-1);const q=[sx+sy*COLS];d[sx+sy*COLS]=0;
+  for(let h=0;h<q.length;h++){const c=q[h],cx=c%COLS,cy=(c/COLS)|0;
+    for(const dd of DIRS){const n=wrapCell(cx+dd.x,cy+dd.y);const k=n.x+n.y*COLS;
+      if(d[k]<0&&!isSolid(n.x,n.y)&&!inRect(L.bubble,n.x,n.y)){d[k]=d[c]+1;q.push(k);}}}
+  return d;
+}
+/* Positions de secours précalculées : 4 blocs 2×2 bien répartis (échantillonnage du plus éloigné) */
+function blockFree(x,y,occ){
+  if(x<1||y<r0||x+1>COLS-2||y+1>ROWS-1)return false;
+  for(let j=0;j<2;j++)for(let i=0;i<2;i++){const k=(x+i)+(y+j)*COLS;if(L.blk[k]||(occ&&occ[k]))return false;if(inRect(L.bubble,x+i,y+j))return false;}
+  return true;
+}
+function computeSafeBlocks(){
+  const all=[];
+  for(let y=r0;y<ROWS-1;y++)for(let x=1;x<COLS-2;x++)if(blockFree(x,y,null))all.push({x:x,y:y});
+  const out=[];
+  if(all.length){
+    out.push(all[Math.floor(all.length/2)]);
+    while(out.length<8&&out.length<all.length){
+      let best=null,bd=-1;
+      for(const c of all){let m=1e9;for(const o of out)m=Math.min(m,Math.abs(c.x-o.x)+Math.abs(c.y-o.y));if(m>bd){bd=m;best=c;}}
+      out.push(best);
+    }
+  }
+  L.safe=out;
+}
+
+/* Apparition robuste des réponses : strict → progressivement relâché → secours */
+const ANS_COLORS=['#ff6b6b','#4dabf7','#51cf66','#b197fc'];
+function spawnAnswers(q){
+  const head=R.snake[0];
+  const occ=new Uint8Array(COLS*ROWS);
+  R.snake.forEach(s=>{occ[s.x+s.y*COLS]=1;});
+  const dist=bfsDist(head.x,head.y);
+  const levels=[{pad:1,mh:8,sep:8},{pad:1,mh:6,sep:6},{pad:1,mh:5,sep:5},{pad:0,mh:4,sep:4},{pad:0,mh:3,sep:3},{pad:0,mh:2,sep:2}];
+  const midX=COLS/2,midY=(r0+ROWS)/2;
+  const cand=[];
+  for(let y=r0;y<ROWS-1;y++)for(let x=1;x<COLS-2;x++){
+    if(!blockFree(x,y,occ))continue;
+    const d=dist[x+y*COLS];if(d<0)continue;
+    cand.push({x:x,y:y,d:d,z:(x+1<midX?0:1)+(y+1<midY?0:2)});
+  }
+  let chosen=null;
+  for(const lv of levels){
+    for(let att=0;att<30&&!chosen;att++){
+      const zs=shuffle([0,1,2,3]),pickd=[];let fail=false;
+      for(const z of zs){
+        const pool=cand.filter(c=>c.z===z&&c.d>=lv.mh&&c.x>=1+lv.pad&&c.x<=COLS-3-lv.pad&&pickd.every(o=>Math.max(Math.abs(o.x-c.x),Math.abs(o.y-c.y))>=Math.min(lv.sep,Math.max(3,lv.sep))));
+        if(!pool.length){fail=true;break;}
+        pickd.push(pick(pool));
+      }
+      if(!fail)chosen=pickd;
+    }
+    if(!chosen){ // sans quadrants : tirage glouton
+      for(let att=0;att<30&&!chosen;att++){
+        const pickd=[];const pool0=shuffle(cand.filter(c=>c.d>=lv.mh));
+        for(const c of pool0){if(pickd.length<4&&pickd.every(o=>Math.max(Math.abs(o.x-c.x),Math.abs(o.y-c.y))>=lv.sep))pickd.push(c);}
+        if(pickd.length===4)chosen=pickd;
+      }
+    }
+    if(chosen)break;
+  }
+  if(!chosen){ // secours : blocs précalculés
+    const fb=shuffle(L.safe.filter(s=>!(Math.abs(s.x-head.x)<3&&Math.abs(s.y-head.y)<3)));
+    chosen=fb.slice(0,4);
+    let k=0;while(chosen.length<4&&L.safe.length){chosen.push(L.safe[k%L.safe.length]);k++;if(k>16)break;}
+    while(chosen.length<4)chosen.push({x:1+chosen.length*2,y:r0+3});
+  }
+  const cols=shuffle(ANS_COLORS);
+  R.answers=chosen.slice(0,4).map((c,i)=>({x:c.x,y:c.y,w:2,h:2,v:q.choices[i].v,ok:q.choices[i].ok,why:q.choices[i].why,color:cols[i],age:0,seed:Math.random()*6.28}));
+  if(R.answers.length!==4)throw new Error('answers!=4');
+}
+
+/* =========================================================
+   3. ÉTAT, PARTIE, MÉCANIQUE DU SERPENT
+   ========================================================= */
+const ALL_CH=CHAPS.map(c=>c.id);
+const DEF={name:'',klass:'',chaps:ALL_CH.slice(),chrono:30,diff:1,tick:150,lives:3,mute:false,report:{stats:true,qa:true,errors:true,review:true,howto:true}};
+const S={histN:0,screen:'fs',from:'menu1',set:Object.assign({},DEF,store.get('settings',{})||{}),best:Number(store.get('best',0))||0,t:0,err:'',focus:null,hover:null,confirmClear:0,msg:'',msgT:0};
+function sanitizeSettings(){const s=S.set;
+  s.chrono=clamp(Math.round(+s.chrono||30),20,60);s.diff=clamp(Math.round(+s.diff||1),1,5);
+  s.tick=clamp(Math.round(+s.tick||150),20,350);s.lives=clamp(Math.round(+s.lives||3),1,5);
+  s.name=String(s.name||'').slice(0,24);s.klass=String(s.klass||'').slice(0,16);
+  if(s.chap&&CHAP_BY_ID[s.chap]&&!Array.isArray(s.chaps))s.chaps=[s.chap];delete s.chap;
+  s.chaps=(Array.isArray(s.chaps)?s.chaps:[]).filter(k=>CHAP_BY_ID[k]);if(!s.chaps.length)s.chaps=ALL_CH.slice();
+  const rp=Object.assign({},DEF.report,(s.report&&typeof s.report==='object')?s.report:{});Object.keys(DEF.report).forEach(k=>{rp[k]=!!rp[k];});s.report=rp;
+  s.mute=!!s.mute;SFX.setMuted(s.mute);}
+sanitizeSettings();
+function chapLabel(){const c=S.set.chaps;return c.length===ALL_CH.length?'Tous':(c.length===1?CHAP_BY_ID[c[0]].label:c.length+' chapitres');}
+function saveSettings(){store.set('settings',S.set);}
+let R=null;
+
+function cellPx(x,y){return{x:x*CELL+CELL/2,y:y*CELL+CELL/2};}
+function emit(px,py,color,n,spd,life,size){
+  for(let i=0;i<n;i++){const a=Math.random()*6.283,v=(0.3+Math.random())*spd;
+    R.particles.push({x:px,y:py,vx:Math.cos(a)*v,vy:Math.sin(a)*v-spd*0.3,life:life*(0.6+Math.random()*0.6),max:life,color:color,size:size*(0.6+Math.random()*0.8)});}
+  if(R.particles.length>260)R.particles.splice(0,R.particles.length-260);
+}
+function floater(px,py,text,color){R.floats.push({x:px,y:py,text:text,color:color,t:0});}
+
+function newRun(){
+  const s=S.set,hx=Math.floor(COLS/2),hy=ROWS-1;
+  R={snake:[{x:hx,y:hy,c:0},{x:hx-1,y:hy,c:1},{x:hx-2,y:hy,c:2}],cc:3,prev:null,dir:{x:1,y:0},queue:[],answers:[],q:null,
+     score:0,lives:s.lives,maxLives:s.lives,wrongStreak:0,streak:0,bestStreak:0,diff:s.diff,goodCount:0,timeLeft:s.chrono,pen:0,speedMult:1,
+     acc:0,t:0,bubbleT:0,log:[],start:new Date(),qStart:0,stuck:0,pend:0,particles:[],floats:[],shake:0,bump:0,
+     cheat:{show:0,used:[],buf:''},over:null,qi:0,corr:null,hand:0,pace:0};
+  R.prev=R.snake.map(c=>({x:c.x,y:c.y,c:c.c}));
+  let free=0;for(let i=0;i<L.blk.length;i++)if(!L.blk[i])free++;
+  R.maxLen=clamp(Math.round(free*0.055),10,20); // longueur maximale : évite que le serpent s’emprisonne lui-même
+  nextQuestion();
+}
+function nextQuestion(){
+  R.q=makeQuestion(S.set.chaps,R.diff);
+  R.timeLeft=S.set.chrono;R.qStart=R.t;R.qi++;
+  spawnAnswers(R.q);SFX.pop();
+}
+function tickMsEff(){return clamp((S.set.tick-R.pen)/R.speedMult,20,600);}
+
+function pushDir(d){
+  if(!R)return;const last=R.queue.length?R.queue[R.queue.length-1]:R.dir;
+  if(sameDir(d,last)||oppDir(d,last))return;
+  if(R.queue.length<2)R.queue.push(d);
+}
+function bodyHit(x,y,growing){
+  const n=R.snake.length-(growing?0:1);
+  for(let i=0;i<n;i++)if(R.snake[i].x===x&&R.snake[i].y===y)return true;
+  return false;
+}
+function cellOK(x,y){return !isSolid(x,y)&&!bubbleOn(x,y)&&!bodyHit(x,y,R.pend>0);}
+/* espace libre accessible depuis une case (plafonné) : sert au rebond intelligent */
+function spaceFrom(sx,sy,cap){
+  const seen=new Set([sx+sy*COLS]),q=[[sx,sy]];
+  for(let h=0;h<q.length&&seen.size<cap;h++){
+    for(const d of DIRS){const n=wrapCell(q[h][0]+d.x,q[h][1]+d.y),k=n.x+n.y*COLS;
+      if(!seen.has(k)&&cellOK(n.x,n.y)){seen.add(k);q.push([n.x,n.y]);}}
+  }
+  return seen.size;
+}
+function moveTo(n,d){
+  R.snake.unshift({x:n.x,y:n.y,c:R.cc++});
+  if(R.pend>0)R.pend--;else R.snake.pop();
+  R.dir=d;
+}
+function tickStep(){
+  R.prev=R.snake.map(c=>({x:c.x,y:c.y,c:c.c}));
+  const head=R.snake[0];
+  let want=R.queue.length?R.queue.shift():R.dir;
+  let n=wrapCell(head.x+want.x,head.y+want.y);
+  if(cellOK(n.x,n.y)){moveTo(n,want);R.stuck=0;}
+  else{ // rebond intelligent : meilleure direction alternative (jamais demi-tour)
+    let best=null,bs=-1;
+    for(const d of shuffle(DIRS)){
+      if(oppDir(d,R.dir)||sameDir(d,want))continue;
+      const m=wrapCell(head.x+d.x,head.y+d.y);if(!cellOK(m.x,m.y))continue;
+      const sp=spaceFrom(m.x,m.y,70)+(sameDir(d,R.dir)?3:0);
+      if(sp>bs){bs=sp;best={d:d,m:m};}
+    }
+    R.queue=[];
+    if(best){moveTo(best.m,best.d);R.bump=0.3;R.stuck=0;SFX.bump();R.pace=0;}
+    else{R.stuck++;if(R.stuck>=2){logAttempt('bloqué','—',0);endGame('Snake bloqué : plus aucun déplacement possible');return;}}
+  }
+  checkPick();
+}
+function checkPick(){
+  const h=R.snake[0];
+  for(const a of R.answers){
+    if(a.age>=0.8&&h.x>=a.x&&h.x<a.x+a.w&&h.y>=a.y&&h.y<a.y+a.h){pickAnswer(a);return;}
+  }
+}
+function cheatFlags(){return Array.from(new Set(R.cheat.used)).join(' ');}
+function logAttempt(res,chosen,sec,why){
+  const q=R.q;
+  R.log.push({n:R.log.length+1,chap:q.chap,level:q.level,text:q.text,correct:fmt(q.ans)+(q.unit?' '+q.unit:''),chosen:chosen===null||chosen==='—'?'—':fmt(chosen)+(q.unit?' '+q.unit:''),res:res,sec:Math.round(sec*10)/10,cheats:cheatFlags(),why:why||null,sol:q.sol||''});
+}
+function pickAnswer(a){
+  const q=R.q,sec=Math.max(0,R.t-R.qStart),c=cellPx(a.x+0.5,a.y+0.5);
+  if(a.ok){
+    logAttempt('bon',a.v,sec);
+    R.score++;R.streak++;R.bestStreak=Math.max(R.bestStreak,R.streak);R.goodCount++;R.wrongStreak=0;if(R.snake.length+R.pend<R.maxLen)R.pend++;R.bubbleT=2;R.hand=2.2;R.corr=null;
+    SFX.good();emit(c.x,c.y,a.color,26,CELL*9,0.9,CELL*0.22);emit(c.x,c.y,'#ffd43b',14,CELL*6,0.8,CELL*0.18);
+    floater(c.x,c.y-CELL,'+1'+(R.streak>=3?'  🔥'+R.streak:''),'#2f9e5b');
+    if(R.goodCount%5===0&&R.diff<5){R.diff++;SFX.level();floater(W/2,H*0.5,'Niveau '+R.diff+' !','#6c7bff');}
+    if(R.score>S.best){S.best=R.score;store.set('best',S.best);}
+    nextQuestion();
+  }else{
+    logAttempt('faux',a.v,sec,a.why);
+    SFX.bad();emit(c.x,c.y,'#ff6b6b',22,CELL*8,0.8,CELL*0.2);R.shake=0.45;
+    R.lives--;R.wrongStreak++;R.streak=0;R.pen+=10;
+    if(R.snake.length>3&&R.pend===0)R.snake.pop();
+    floater(c.x,c.y-CELL,'−1 ❤','#e03131');
+    R.corr={q:q,chosen:a.v,why:a.why,t:6};
+    if(R.lives<=0){endGame('Plus de vies');return;}
+    if(R.wrongStreak>=3){endGame('3 erreurs de suite');return;}
+    nextQuestion();
+  }
+}
+function onTimeout(){
+  const q=R.q;logAttempt('timeout','—',S.set.chrono);
+  R.corr={q:q,chosen:null,why:null,t:6};
+  endGame('Temps écoulé');
+}
+function endGame(reason){
+  if(!R||R.over)return;
+  R.over=reason;if(R.score>S.best){S.best=R.score;store.set('best',S.best);}
+  saveHistory();
+  S.screen='end';R.endT=0;SFX.over();
+}
+function runToGame(r){return{date:r.start.toISOString(),name:S.set.name,klass:S.set.klass,chaps:S.set.chaps.slice(),diff:r.diff,score:r.score,over:r.over||'',log:r.log.slice(0,200)};}
+function saveHistory(){ // historique local (40 parties max) : sert au rapport cumulé
+  try{if(R.saved)return;R.saved=true;const h=store.get('history',[]);const a=Array.isArray(h)?h:[];a.push(runToGame(R));while(a.length>40)a.shift();store.set('history',a);}catch(e){}
+}
+function bilan(){
+  const rows={},mk0=()=>({bon:0,faux:0,timeout:0,'bloqué':0,tot:0,sec:0,nsec:0});
+  const g=mk0();
+  R.log.forEach(r=>{const o=rows[r.chap]||(rows[r.chap]=mk0());[o,g].forEach(x=>{x[r.res]++;x.tot++;if(r.res==='bon'||r.res==='faux'){x.sec+=r.sec;x.nsec++;}});});
+  const fin=o=>{o.pct=o.tot?Math.round(100*o.bon/o.tot):0;o.avg=o.nsec?Math.round(10*o.sec/o.nsec)/10:0;return o;};
+  Object.keys(rows).forEach(k=>fin(rows[k]));fin(g);
+  return{rows:rows,g:g};
+}
+function relayoutRun(){ // après un redimensionnement qui change la grille
+  if(!R||R.over)return;
+  const hx=Math.floor(COLS/2),hy=ROWS-1,len=Math.max(3,R.snake.length);
+  R.snake=[];for(let i=0;i<len;i++)R.snake.push({x:(hx-i+COLS)%COLS,y:hy,c:len-i});
+  R.prev=R.snake.map(c=>({x:c.x,y:c.y}));R.dir={x:1,y:0};R.queue=[];R.pend=0;R.bubbleT=0;
+  spawnAnswers(R.q);
+}
+function startGame(){
+  SFX.unlock();saveSettings();newRun();S.screen='play';
+}
+
+/* Mise à jour par image */
+function update(dt){
+  S.t+=dt;if(S.msgT>0)S.msgT-=dt;
+  if(!R)return;
+  R.particles.forEach(p=>{p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=CELL*14*dt;});
+  R.particles=R.particles.filter(p=>p.life>0);
+  R.floats.forEach(f=>{f.t+=dt;});R.floats=R.floats.filter(f=>f.t<1.4);
+  if(R.shake>0)R.shake=Math.max(0,R.shake-dt);
+  if(R.bump>0)R.bump=Math.max(0,R.bump-dt);
+  if(S.screen==='end'){R.endT=(R.endT||0)+dt;return;}
+  if(S.screen!=='play')return;
+  R.t+=dt;R.pace+=dt;
+  R.answers.forEach(a=>{a.age+=dt;});
+  if(R.bubbleT>0)R.bubbleT-=dt;
+  if(R.hand>0)R.hand-=dt;
+  if(R.corr){R.corr.t-=dt;if(R.corr.t<=0)R.corr=null;}
+  if(R.cheat.show>0)R.cheat.show-=dt;
+  const before=Math.ceil(R.timeLeft);R.timeLeft-=dt;
+  if(R.timeLeft<=5&&Math.ceil(R.timeLeft)<before&&R.timeLeft>0)SFX.tick();
+  if(R.timeLeft<=0){R.timeLeft=0;onTimeout();return;}
+  const tm=tickMsEff();R.acc+=dt*1000;
+  let guard=0;
+  while(R.acc>=tm&&S.screen==='play'&&guard++<4){R.acc-=tm;tickStep();}
+  if(R.acc>tm*2)R.acc=0;
+}
+
+/* =========================================================
+   4. DESSIN (1/2) : la salle de classe
+   Décor statique mis en cache ; élèves, prof, bulle et tableau dynamiques.
+   ========================================================= */
+function rr(c,x,y,w,h,r){r=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+function shade(hex,k){ // k>0 éclaircit, k<0 assombrit
+  const n=parseInt(hex.slice(1),16);let r=n>>16,g=(n>>8)&255,b=n&255;
+  const f=k>=0?(v=>Math.round(v+(255-v)*k)):(v=>Math.round(v*(1+k)));
+  return'rgb('+f(r)+','+f(g)+','+f(b)+')';
+}
+let bg=null;
+function srand(seed){let s=seed*9301+49297;return()=>{s=(s*9301+49297)%233280;return s/233280;};}
+
+function buildBg(){
+  bg=document.createElement('canvas');bg.width=Math.round(W*DPR);bg.height=Math.round(H*DPR);
+  const c=bg.getContext('2d');c.setTransform(DPR,0,0,DPR,0,0);
+  const rnd2=srand(7);
+  const yWall=tbRows*CELL,yFloor=r0*CELL;
+  // mur
+  c.fillStyle='#e6f3ee';c.fillRect(0,yWall,W,yFloor-yWall);
+  c.fillStyle='rgba(60,120,100,0.07)';for(let x=0;x<W;x+=CELL*2)c.fillRect(x,yWall,CELL,yFloor-yWall);
+  // plinthe
+  c.fillStyle='#b98a5a';c.fillRect(0,yFloor-CELL*0.28,W,CELL*0.28);
+  c.fillStyle='rgba(255,255,255,0.35)';c.fillRect(0,yFloor-CELL*0.28,W,2);
+  // parquet : lattes verticales alternées avec joints décalés
+  const pw=Math.max(10,CELL*0.62);let i=0;
+  for(let x=0;x<W+pw;x+=pw,i++){
+    c.fillStyle=i%2?'#efd9b4':'#e6c996';c.fillRect(x,yFloor,pw,H-yFloor);
+    c.fillStyle='rgba(120,80,30,0.16)';c.fillRect(x,yFloor,1.2,H-yFloor);
+    const jh=CELL*(2.2+(i%5)*0.35);let off=(i*37)%Math.round(jh);
+    for(let y=yFloor-off;y<H;y+=jh){if(y>yFloor){c.fillStyle='rgba(120,80,30,0.14)';c.fillRect(x,y,pw,1.2);}}
+    for(let k=0;k<4;k++){c.fillStyle='rgba(150,100,40,0.07)';c.fillRect(x+rnd2()*pw*0.8,yFloor+rnd2()*(H-yFloor),pw*0.15,CELL*(0.4+rnd2()*1.2));}
+  }
+  // ombre portée du mur sur le sol
+  const gr=c.createLinearGradient(0,yFloor,0,yFloor+CELL*0.9);gr.addColorStop(0,'rgba(60,40,20,0.22)');gr.addColorStop(1,'rgba(60,40,20,0)');
+  c.fillStyle=gr;c.fillRect(0,yFloor,W,CELL*0.9);
+  // tapis sous le prof
+  const P=L.prof;c.fillStyle='rgba(108,123,255,0.20)';rr(c,(P.x-1.2)*CELL,(P.y-0.1)*CELL,(P.w+2.4)*CELL,(P.h+1.2)*CELL,CELL*0.4);c.fill();
+  c.strokeStyle='rgba(108,123,255,0.35)';c.lineWidth=2;c.setLineDash([CELL*0.3,CELL*0.2]);rr(c,(P.x-0.9)*CELL,(P.y+0.2)*CELL,(P.w+1.8)*CELL,(P.h+0.6)*CELL,CELL*0.3);c.stroke();c.setLineDash([]);
+  drawWallDecor(c);
+  drawBoardStatic(c);
+  L.tables.forEach(t=>drawDeskStatic(c,t));
+  L.furn.forEach(f=>drawFurniture(c,f));
+}
+function drawWallDecor(c){
+  const yWall=tbRows*CELL,u=CELL;
+  // horloge (à droite du tableau)
+  const cx=W-1.0*u,cy=yWall+bdRows*u*0.42,rad=Math.min(u*0.78,bdRows*u*0.3);
+  if(W>=640){
+    c.fillStyle='#fff';c.strokeStyle='#8b5a2b';c.lineWidth=Math.max(3,u*0.12);c.beginPath();c.arc(cx,cy,rad,0,6.283);c.fill();c.stroke();
+    c.strokeStyle='#445';c.lineWidth=2;for(let k=0;k<12;k++){const a=k*Math.PI/6;c.beginPath();c.moveTo(cx+Math.cos(a)*rad*0.8,cy+Math.sin(a)*rad*0.8);c.lineTo(cx+Math.cos(a)*rad*0.92,cy+Math.sin(a)*rad*0.92);c.stroke();}
+    c.lineWidth=3;c.beginPath();c.moveTo(cx,cy);c.lineTo(cx+Math.cos(-1.2)*rad*0.5,cy+Math.sin(-1.2)*rad*0.5);c.stroke();
+    c.lineWidth=2;c.beginPath();c.moveTo(cx,cy);c.lineTo(cx+Math.cos(0.4)*rad*0.7,cy+Math.sin(0.4)*rad*0.7);c.stroke();
+    // affiche : règle graduée + équerre à gauche
+    const px=0.45*u,pw2=1.1*u,py=yWall+0.3*u,ph=Math.min(bdRows*u*0.7,2.6*u);
+    c.fillStyle='#fff3bf';rr(c,px,py,pw2,ph,6);c.fill();c.strokeStyle='#e0b030';c.lineWidth=2;c.stroke();
+    c.fillStyle='#e8590c';c.font='bold '+Math.round(u*0.3)+'px system-ui';c.textAlign='center';c.fillText('a² + b²',px+pw2/2,py+ph*0.35);c.fillText('= c²',px+pw2/2,py+ph*0.6);
+    c.fillStyle='#2f9e5b';c.font='bold '+Math.round(u*0.2)+'px system-ui';c.fillText('1 m=100 cm',px+pw2/2,py+ph*0.85);
+  }
+}
+function drawBoardStatic(c){
+  const B=L.board,fr=Math.max(6,CELL*0.2);
+  c.fillStyle='rgba(0,0,0,0.18)';rr(c,B.x+4,B.y+7,B.w,B.h,10);c.fill();
+  c.fillStyle='#8b5a2b';rr(c,B.x-fr,B.y-fr,B.w+2*fr,B.h+2*fr,10);c.fill();
+  c.fillStyle='#a8723a';rr(c,B.x-fr,B.y-fr,B.w+2*fr,fr*0.7,6);c.fill();
+  c.fillStyle='#17573a';rr(c,B.x,B.y,B.w,B.h,5);c.fill();
+  const rn=srand(3);
+  for(let k=0;k<26;k++){c.fillStyle='rgba(255,255,255,'+(0.025+rn()*0.04)+')';c.beginPath();c.ellipse(B.x+rn()*B.w,B.y+rn()*B.h,B.w*(0.03+rn()*0.08),B.h*(0.02+rn()*0.06),rn()*3,0,6.283);c.fill();}
+  // rebord à craies
+  c.fillStyle='#6e4520';rr(c,B.x+B.w*0.06,B.y+B.h+fr*0.2,B.w*0.88,fr*0.9,3);c.fill();
+  c.fillStyle='#fff';rr(c,B.x+B.w*0.12,B.y+B.h+fr*0.05,CELL*0.7,fr*0.5,2);c.fill();
+  c.fillStyle='#ffd43b';rr(c,B.x+B.w*0.12+CELL*0.9,B.y+B.h+fr*0.05,CELL*0.55,fr*0.5,2);c.fill();
+  c.fillStyle='#f06595';rr(c,B.x+B.w*0.78,B.y+B.h+fr*0.0,CELL*1.0,fr*0.65,3);c.fill(); // brosse
+}
+function drawDeskStatic(c,t){
+  const x=t.x*CELL,y=t.y*CELL,w=t.w*CELL,h=t.h*CELL,dh=Math.max(CELL*1.05,h*0.52),th=CELL*0.2;
+  c.fillStyle='rgba(60,35,10,0.22)';rr(c,x+3,y+6,w,dh+th,10);c.fill();
+  c.fillStyle='#8d5a2c';rr(c,x,y+th,w,dh,10);c.fill();           // chant (relief)
+  c.fillStyle='#d9a066';rr(c,x,y,w,dh,10);c.fill();               // plateau
+  c.fillStyle='rgba(255,255,255,0.22)';rr(c,x+3,y+3,w-6,dh*0.25,6);c.fill();
+  c.strokeStyle='rgba(110,70,30,0.35)';c.lineWidth=1.2;
+  for(let k=1;k<4;k++){c.beginPath();c.moveTo(x+w*k/4,y+4);c.lineTo(x+w*k/4,y+dh-4);c.stroke();}
+  // objets posés : cahiers, trousse, stylo
+  const rn=srand(t.x*31+t.y*17),cols=['#4dabf7','#ff6b6b','#51cf66','#ffd43b','#da77f2'];
+  const n=t.w>=5?2:1;
+  for(let k=0;k<n;k++){
+    const cx=x+w*(k+0.5)/n,u=Math.min(CELL*0.9,dh*0.7);
+    c.save();c.translate(cx-u*0.35,y+dh*0.5);c.rotate((rn()-0.5)*0.25);
+    c.fillStyle=cols[Math.floor(rn()*5)];rr(c,-u*0.45,-u*0.35,u*0.9,u*0.7,3);c.fill();
+    c.fillStyle='#fff';rr(c,-u*0.3,-u*0.18,u*0.6,u*0.32,2);c.fill();c.restore();
+    c.fillStyle=cols[Math.floor(rn()*5)];rr(c,cx+u*0.28,y+dh*0.3,u*0.55,u*0.24,u*0.12);c.fill();
+    c.fillStyle='#f4c430';c.fillRect(cx+u*0.25,y+dh*0.62,u*0.7,u*0.07);
+  }
+}
+function drawFurniture(c,f){
+  const x=f.x*CELL,y=f.y*CELL,w=f.w*CELL,h=f.h*CELL;
+  c.fillStyle='rgba(50,30,10,0.25)';rr(c,x+4,y+7,w,h,8);c.fill();
+  c.fillStyle='#7a4a24';rr(c,x,y,w,h,8);c.fill();
+  c.fillStyle='#9a6234';rr(c,x+4,y+4,w-8,h-8,6);c.fill();
+  c.fillStyle='rgba(0,0,0,0.20)'; // rayures noires peu opaques
+  const sw=Math.max(3,w/6);for(let sx=x+6;sx<x+w-6;sx+=sw*2)c.fillRect(sx,y+6,sw,h-12);
+  c.fillStyle='rgba(0,0,0,0.30)';
+  const rows=Math.max(3,Math.round(f.h/3));for(let k=1;k<rows;k++)c.fillRect(x+4,y+h*k/rows-2,w-8,4);
+  c.fillStyle='rgba(255,255,255,0.18)';c.fillRect(x+6,y+5,w-12,3);
+  c.fillStyle='#e9c46a';c.beginPath();c.arc(x+(f.side==='L'?w-8:8),y+h/2,Math.max(3,CELL*0.1),0,6.283);c.fill();
+}
+
+/* ---------- Élèves vus de dos, face au tableau ---------- */
+const SHIRT=['#ff6b6b','#4dabf7','#fcc419','#69db7c','#da77f2','#ff922b','#38d9a9','#748ffc','#f783ac'];
+const HAIR=['#2b1d12','#5a3a22','#c98b3d','#e8c36a','#161616','#8a4b2a','#c0392b','#6b6b6b'];
+const SKIN=['#f5c9a0','#e2a97e','#b57b53','#8d5a3b','#f9d9bd'];
+function drawStudent(c,t,st,time,raised){
+  const x=t.x*CELL,y=t.y*CELL,w=t.w*CELL,h=t.h*CELL,dh=Math.max(CELL*1.05,h*0.52);
+  const cx=x+w*(st.k+0.5)/st.n,bot=y+h,u=Math.min(CELL*1.15,(bot-(y+dh)+CELL*0.55)/1.75);
+  const sd=st.seed,shirt=SHIRT[sd%SHIRT.length],hair=HAIR[(sd*3)%HAIR.length],skin=SKIN[(sd*5)%SKIN.length],style=(sd*7)%4;
+  const sway=Math.sin(time*0.9+sd)*u*0.05,nod=Math.sin(time*0.6+sd*2)>0.96?u*0.05:0;
+  // dossier de chaise (devant le dos)
+  const torsoTop=bot-u*0.95;
+  // bras sur la table
+  c.fillStyle=shade(shirt,-0.12);
+  rr(c,cx-u*0.95,torsoTop-u*0.35,u*0.38,u*0.9,u*0.19);c.fill();rr(c,cx+u*0.57,torsoTop-u*0.35,u*0.38,u*0.9,u*0.19);c.fill();
+  if(raised){ // lève la main
+    c.fillStyle=shade(shirt,-0.12);rr(c,cx+u*0.62,torsoTop-u*1.35,u*0.32,u*1.2,u*0.16);c.fill();
+    c.fillStyle=skin;c.beginPath();c.arc(cx+u*0.78,torsoTop-u*1.42,u*0.2,0,6.283);c.fill();
+  }
+  // torse
+  c.fillStyle=shirt;rr(c,cx-u*0.85,torsoTop,u*1.7,u*0.95,u*0.4);c.fill();
+  c.strokeStyle=shade(shirt,-0.22);c.lineWidth=Math.max(1.5,u*0.05);c.beginPath();c.moveTo(cx,torsoTop+u*0.2);c.lineTo(cx,bot-u*0.15);c.stroke();
+  // chaise
+  c.fillStyle='#3d4f78';rr(c,cx-u*0.95,bot-u*0.42,u*1.9,u*0.26,u*0.13);c.fill();
+  c.fillStyle='rgba(255,255,255,0.22)';rr(c,cx-u*0.85,bot-u*0.4,u*1.7,u*0.07,u*0.04);c.fill();
+  // tête (vue de dos)
+  const hx=cx+sway,hy=torsoTop-u*0.12+nod,hr=u*0.5;
+  if(style===1){c.fillStyle=hair;c.beginPath();c.ellipse(hx+u*0.02,hy+hr*1.05,u*0.16,u*0.38,0,0,6.283);c.fill();} // queue de cheval
+  c.fillStyle=skin;c.beginPath();c.arc(hx-hr*0.98,hy+hr*0.1,hr*0.2,0,6.283);c.fill();c.beginPath();c.arc(hx+hr*0.98,hy+hr*0.1,hr*0.2,0,6.283);c.fill();
+  c.fillStyle=hair;c.beginPath();c.arc(hx,hy,hr,0,6.283);c.fill();
+  if(style===2){c.beginPath();c.arc(hx,hy-hr*0.95,hr*0.38,0,6.283);c.fill();} // chignon
+  if(style===3){c.fillStyle=shade(shirt,-0.18);c.beginPath();c.arc(hx,hy,hr*1.02,Math.PI*1.05,Math.PI*1.95);c.closePath();c.fill();} // capuche/casquette
+  c.fillStyle='rgba(255,255,255,0.18)';c.beginPath();c.ellipse(hx-hr*0.3,hy-hr*0.35,hr*0.35,hr*0.2,-0.5,0,6.283);c.fill();
+}
+function drawStudents(c,time){
+  const slot=R?((R.qi||0)%3):0;
+  L.students.forEach((st,i)=>{
+    const t=L.tables[st.t];
+    drawStudent(c,t,st,time,R&&R.hand>0&&((i+slot)%4===0));
+  });
+}
+
+/* ---------- Professeur (de face), sa bulle ---------- */
+function drawProf(c,time){
+  const P=L.prof,u=CELL,cx=(P.x+1)*u,top=P.y*u,bob=Math.sin(time*1.6)*u*0.03;
+  // ombre
+  c.fillStyle='rgba(40,25,10,0.22)';c.beginPath();c.ellipse(cx,top+2*u-u*0.05,u*1.0,u*0.18,0,0,6.283);c.fill();
+  // jambes
+  c.fillStyle='#34405a';rr(c,cx-u*0.5,top+1.55*u,u*0.4,u*0.45,u*0.1);c.fill();rr(c,cx+u*0.1,top+1.55*u,u*0.4,u*0.45,u*0.1);c.fill();
+  c.fillStyle='#2b2b2b';rr(c,cx-u*0.56,top+1.9*u,u*0.5,u*0.12,u*0.06);c.fill();rr(c,cx+u*0.06,top+1.9*u,u*0.5,u*0.12,u*0.06);c.fill();
+  // veston
+  c.fillStyle='#3b5b92';rr(c,cx-u*0.78,top+0.82*u+bob,u*1.56,u*0.92,u*0.3);c.fill();
+  c.fillStyle='#f8f9fa';c.beginPath();c.moveTo(cx-u*0.2,top+0.85*u+bob);c.lineTo(cx+u*0.2,top+0.85*u+bob);c.lineTo(cx,top+1.3*u+bob);c.closePath();c.fill();
+  c.fillStyle='#e03131';c.beginPath();c.moveTo(cx-u*0.07,top+1.0*u+bob);c.lineTo(cx+u*0.07,top+1.0*u+bob);c.lineTo(cx+u*0.11,top+1.5*u+bob);c.lineTo(cx,top+1.6*u+bob);c.lineTo(cx-u*0.11,top+1.5*u+bob);c.closePath();c.fill();
+  // bras + livre + craie
+  c.fillStyle='#34548a';rr(c,cx-u*0.98,top+0.95*u+bob,u*0.3,u*0.7,u*0.15);c.fill();
+  c.fillStyle='#d6336c';rr(c,cx-u*1.0,top+1.45*u+bob,u*0.42,u*0.3,u*0.05);c.fill();
+  c.fillStyle='#fff';c.fillRect(cx-u*0.98,top+1.48*u+bob,u*0.36,u*0.04);
+  const wave=R&&R.hand>0?Math.sin(time*10)*0.35:0;
+  c.save();c.translate(cx+u*0.82,top+0.98*u+bob);c.rotate(-0.5+wave);c.fillStyle='#34548a';rr(c,-u*0.15,0,u*0.3,u*0.7,u*0.15);c.fill();
+  c.fillStyle='#f5c9a0';c.beginPath();c.arc(0,u*0.72,u*0.15,0,6.283);c.fill();c.fillStyle='#fff';c.fillRect(-u*0.03,u*0.78,u*0.06,u*0.22);c.restore();
+  // tête
+  const hy=top+0.5*u+bob;
+  c.fillStyle='#f5c9a0';c.beginPath();c.arc(cx,hy,u*0.44,0,6.283);c.fill();
+  c.fillStyle='#8a8f98';c.beginPath();c.arc(cx,hy-u*0.12,u*0.46,Math.PI*1.0,Math.PI*2.0);c.fill();
+  c.beginPath();c.arc(cx-u*0.42,hy,u*0.1,0,6.283);c.fill();c.beginPath();c.arc(cx+u*0.42,hy,u*0.1,0,6.283);c.fill();
+  c.strokeStyle='#222';c.lineWidth=Math.max(1.5,u*0.05);c.beginPath();c.arc(cx-u*0.17,hy+u*0.02,u*0.13,0,6.283);c.stroke();c.beginPath();c.arc(cx+u*0.17,hy+u*0.02,u*0.13,0,6.283);c.stroke();
+  c.beginPath();c.moveTo(cx-u*0.04,hy+u*0.02);c.lineTo(cx+u*0.04,hy+u*0.02);c.stroke();
+  c.fillStyle='#222';c.beginPath();c.arc(cx-u*0.17,hy+u*0.03,u*0.04,0,6.283);c.fill();c.beginPath();c.arc(cx+u*0.17,hy+u*0.03,u*0.04,0,6.283);c.fill();
+  c.lineWidth=Math.max(1.5,u*0.05);c.beginPath();c.arc(cx,hy+u*0.14,u*0.14,0.2,Math.PI-0.2);c.stroke();
+}
+function drawBubble(c){
+  if(!R||R.bubbleT<=0)return;
+  const B=L.bubble,t=R.bubbleT,pop=clamp((2-t)/0.25,0,1),al=clamp(t/0.4,0,1),s=0.7+0.3*(1-Math.pow(1-pop,3));
+  const x=B.x*CELL,y=B.y*CELL,w=B.w*CELL,h=B.h*CELL;
+  c.save();c.globalAlpha=al;c.translate(x,y+h/2);c.scale(s,s);c.translate(-x,-(y+h/2));
+  c.fillStyle='rgba(40,30,10,0.18)';rr(c,x+3,y+5,w,h,h*0.35);c.fill();
+  c.fillStyle='#fff';c.strokeStyle='#2b3a67';c.lineWidth=Math.max(2,CELL*0.07);
+  rr(c,x,y,w,h,h*0.35);c.fill();c.stroke();
+  c.beginPath();c.moveTo(x+2,y+h*0.45);c.lineTo(x-CELL*0.55,y+h*0.5);c.lineTo(x+2,y+h*0.72);c.closePath();c.fill();
+  c.fillStyle='#fff';c.fillRect(x-1,y+h*0.47,5,h*0.23);
+  c.fillStyle='#2f9e5b';fitText(c,'Bonne réponse !',x+w/2,y+h*0.52,w*0.88,h*0.5,'800');
+  c.restore();
+}
+function fitText(c,txt,x,y,maxW,maxSize,weight,family){
+  let s=Math.max(8,Math.floor(maxSize));const f=family||'ui-rounded,"Segoe UI",system-ui,sans-serif';
+  c.textAlign='center';c.textBaseline='middle';
+  do{c.font=(weight||'700')+' '+s+'px '+f;if(c.measureText(txt).width<=maxW||s<=8)break;s-=1;}while(true);
+  c.fillText(txt,x,y);return s;
+}
+
+/* ---------- Tableau : question en très grand, chrono, correction ---------- */
+function drawBoardText(c,mode){
+  const B=L.board,pad=B.w*0.04;
+  c.save();c.textBaseline='middle';
+  if(mode==='welcome'){
+    c.fillStyle='#fff';fitText(c,'Maths Snake',B.x+B.w/2,B.y+B.h*0.24,B.w*0.8,B.h*0.3,'800');
+    c.fillStyle='#e9f5ee';wrapCenter(c,TXT.welcome,B.x+B.w/2,B.y+B.h*0.62,B.w*0.86,B.h*0.17,2);
+    c.restore();return;
+  }
+  if(!R||!R.q){c.restore();return;}
+  const q=R.q,ch=CHAP_BY_ID[q.chap],hasCorr=!!R.corr;
+  c.fillStyle='#ffe066';fitText(c,'Question ('+q.chap+')',B.x+B.w/2,B.y+B.h*0.12,B.w*0.7,B.h*0.16,'700');
+  const lines=q.text.split('\n'),areaTop=B.y+B.h*0.23,areaH=B.h*(hasCorr?0.42:0.68);
+  const ls=Math.min(areaH/(lines.length*1.15),B.h*0.3);
+  let size=Math.floor(ls);c.fillStyle='#fff';
+  // taille commune pour toutes les lignes
+  for(let guard=0;guard<40;guard++){c.font='800 '+size+'px ui-rounded,"Segoe UI",system-ui,sans-serif';let m=0;lines.forEach(l=>{m=Math.max(m,c.measureText(l).width);});if(m<=B.w*0.82-(W>=640?CELL*3.2:0)||size<10)break;size-=2;}
+  c.textAlign='center';
+  lines.forEach((l,i)=>{c.fillText(l,B.x+B.w/2-(W>=640?CELL*0.5:0),areaTop+areaH*(i+0.5)/lines.length+(lines.length>1?0:0));});
+  if(hasCorr){
+    const k=R.corr,cy=B.y+B.h*0.78;
+    c.fillStyle='#ffa8a8';
+    const first=k.chosen===null?'Temps écoulé ! La réponse était '+fmt(k.q.ans)+(k.q.unit?' '+k.q.unit:''):'Raté : '+fmt(k.chosen)+' ✘   Bonne réponse : '+fmt(k.q.ans)+(k.q.unit?' '+k.q.unit:'');
+    fitText(c,first,B.x+B.w/2,cy-B.h*0.08,B.w*0.88,B.h*0.1,'700');
+    c.fillStyle='#fff3bf';const why=(k.why&&WHY[k.why])||k.q.sol||'';
+    if(why)wrapCenter(c,why,B.x+B.w/2,cy+B.h*0.07,B.w*0.9,B.h*0.085,2);
+  }
+  // chrono : anneau + secondes
+  if(R){
+    const cr=Math.min(B.h*0.3,CELL*1.0),cx=B.x+B.w-cr-pad*0.5,cy=B.y+cr+B.h*0.05,frac=clamp(R.timeLeft/S.set.chrono,0,1),low=R.timeLeft<=5;
+    const pulse=low?1+Math.sin(S.t*12)*0.06:1;
+    c.save();c.translate(cx,cy);c.scale(pulse,pulse);
+    c.lineWidth=cr*0.22;c.strokeStyle='rgba(255,255,255,0.22)';c.beginPath();c.arc(0,0,cr*0.78,0,6.283);c.stroke();
+    c.strokeStyle=low?'#ff6b6b':(frac<0.5?'#ffd43b':'#8ce99a');c.lineCap='round';c.beginPath();c.arc(0,0,cr*0.78,-Math.PI/2,-Math.PI/2+6.283*frac);c.stroke();
+    c.fillStyle=low?'#ffc9c9':'#fff';fitText(c,String(Math.ceil(R.timeLeft)),0,cr*0.04,cr*1.0,cr*0.82,'800');c.restore();
+  }
+  c.restore();
+}
+function wrapCenter(c,text,x,y,maxW,size,maxLines){
+  let s=Math.floor(size);const f='600 ';
+  for(let g=0;g<12;g++){
+    c.font=f+s+'px ui-rounded,"Segoe UI",system-ui,sans-serif';
+    const words=text.split(' '),lines=[];let cur='';
+    words.forEach(w=>{const t=cur?cur+' '+w:w;if(c.measureText(t).width>maxW&&cur){lines.push(cur);cur=w;}else cur=t;});
+    lines.push(cur);
+    if(lines.length<=maxLines||s<=9){c.textAlign='center';const lh=s*1.2;lines.slice(0,maxLines).forEach((l,i)=>c.fillText(l,x,y+(i-(Math.min(lines.length,maxLines)-1)/2)*lh));return;}
+    s-=1;
+  }
+}
+
+/* =========================================================
+   5. DESSIN (2/2) : serpent de cahiers, réponses, HUD, effets
+   ========================================================= */
+const SNAKE_PAL=['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#4dabf7','#9775fa','#f783ac'];
+function notebook(c,s,col,spiralSide){
+  c.fillStyle='rgba(30,20,60,0.22)';rr(c,-s/2+s*0.05,-s/2+s*0.08,s,s,s*0.2);c.fill();
+  c.fillStyle=col;rr(c,-s/2,-s/2,s,s,s*0.2);c.fill();
+  c.strokeStyle=shade(col,-0.28);c.lineWidth=Math.max(1.2,s*0.06);c.stroke();
+  c.fillStyle='rgba(255,255,255,0.28)';rr(c,-s/2+s*0.08,-s/2+s*0.07,s*0.84,s*0.16,s*0.08);c.fill();
+  c.fillStyle='#fff';rr(c,s*0.22,-s*0.36,s*0.2,s*0.72,s*0.05);c.fill(); // tranche des pages
+  c.fillStyle='#f1f3f5';rr(c,-s*0.18,-s*0.2,s*0.34,s*0.4,s*0.06);c.fill();   // étiquette
+  c.strokeStyle='#495057';c.lineWidth=Math.max(1,s*0.05);
+  for(let k=-1;k<=1;k++){c.beginPath();c.arc(-s/2+s*0.04,k*s*0.27,s*0.07,0,6.283);c.stroke();}
+}
+function segPos(i,a){
+  const cur=R.snake[i],pv=R.prev&&R.prev[i]?R.prev[i]:cur,dx=cur.x-pv.x,dy=cur.y-pv.y;
+  if(Math.abs(dx)>1.5||Math.abs(dy)>1.5)return{x:cur.x+0.5,y:cur.y+0.5,jump:true};
+  return{x:pv.x+dx*a+0.5,y:pv.y+dy*a+0.5};
+}
+function drawSnake(c){
+  const n=R.snake.length,tm=tickMsEff(),a=(S.screen==='play')?clamp(R.acc/tm,0,1):1,P=[];
+  for(let i=0;i<n;i++)P.push(segPos(i,a));
+  // tube de liaison
+  c.lineCap='round';c.lineJoin='round';c.strokeStyle='#5b4b9a';c.lineWidth=CELL*0.46;
+  c.beginPath();let open=false;
+  for(let i=n-1;i>=0;i--){const p=P[i],x=p.x*CELL,y=p.y*CELL;
+    if(!open||(i<n-1&&(Math.abs(P[i].x-P[i+1].x)>1.6||Math.abs(P[i].y-P[i+1].y)>1.6))){c.moveTo(x,y);open=true;}else c.lineTo(x,y);}
+  c.stroke();
+  for(let i=n-1;i>=1;i--){
+    const p=P[i],q=P[i-1];let ang=Math.atan2(q.y-p.y,q.x-p.x);if(Math.abs(q.x-p.x)>1.6||Math.abs(q.y-p.y)>1.6)ang=Math.atan2(R.dir.y,R.dir.x);
+    const taper=i>n-3?0.82:1;
+    c.save();c.translate(p.x*CELL,p.y*CELL);c.rotate(ang);notebook(c,CELL*0.82*taper,SNAKE_PAL[R.snake[i].c%SNAKE_PAL.length]);c.restore();
+  }
+  // tête
+  const h=P[0],ang=Math.atan2(R.dir.y,R.dir.x),sq=1+0.18*(R.bump/0.3),s=CELL*1.0;
+  c.save();c.translate(h.x*CELL,h.y*CELL);c.rotate(ang);c.scale(sq,1/sq);notebook(c,s,'#845ef7');
+  const ex=s*0.2,ey=s*0.22;
+  [-1,1].forEach(k=>{c.fillStyle='#fff';c.beginPath();c.arc(ex,k*ey,s*0.15,0,6.283);c.fill();c.strokeStyle='#343a40';c.lineWidth=1.2;c.stroke();
+    c.fillStyle='#212529';c.beginPath();c.arc(ex+s*0.05,k*ey,s*0.075,0,6.283);c.fill();});
+  c.strokeStyle='#212529';c.lineWidth=Math.max(1.5,s*0.06);c.lineCap='round';c.beginPath();c.arc(s*0.28,0,s*0.12,-1.0,1.0);c.stroke();
+  c.restore();
+}
+function easeOutBack(t){const k=1.70158;t=clamp(t,0,1)-1;return t*t*((k+1)*t+k)+1;}
+function drawAnswers(c){
+  R.answers.forEach(a=>{
+    const cx=(a.x+1)*CELL,cy=(a.y+1)*CELL,sc=easeOutBack(a.age/0.5),bob=Math.sin(S.t*2.2+a.seed)*CELL*0.05;
+    const ghost=a.age<0.8,gold=a.ok&&R.cheat.show>0;
+    c.save();c.globalAlpha=ghost?0.55+0.45*(a.age/0.8):1;
+    c.fillStyle='rgba(40,25,10,0.22)';c.beginPath();c.ellipse(cx,cy+CELL*0.75,CELL*0.7*sc,CELL*0.14*sc,0,0,6.283);c.fill();
+    c.translate(cx,cy+bob);c.scale(sc,sc);
+    if(gold){c.fillStyle='rgba(255,212,59,'+(0.35+0.2*Math.sin(S.t*8))+')';c.beginPath();c.arc(0,0,CELL*1.1,0,6.283);c.fill();}
+    const s=CELL*1.6,col=gold?'#ffd43b':a.color;
+    c.fillStyle=col;rr(c,-s/2,-s/2,s,s,s*0.14);c.fill();
+    c.strokeStyle=shade(col.length===7?col:'#888888',-0.3);c.lineWidth=Math.max(2,CELL*0.07);c.stroke();
+    c.fillStyle='rgba(255,255,255,0.3)';rr(c,-s/2+s*0.06,-s/2+s*0.05,s*0.88,s*0.1,s*0.05);c.fill();
+    c.fillStyle='#fff';rr(c,s*0.36,-s*0.42,s*0.1,s*0.84,s*0.03);c.fill();
+    c.strokeStyle='#495057';c.lineWidth=Math.max(1.5,CELL*0.06);
+    for(let k=-2;k<=2;k++){c.beginPath();c.arc(-s/2+s*0.03,k*s*0.17,s*0.045,0,6.283);c.stroke();}
+    const lw=s*0.74,lh=s*(a.v!==undefined&&R.q&&R.q.unit?0.56:0.46);
+    c.fillStyle='#fff';rr(c,-lw/2-s*0.02,-lh/2-s*(R.q&&R.q.unit?0.05:0),lw,lh,s*0.1);c.fill();
+    c.strokeStyle='rgba(0,0,0,0.12)';c.lineWidth=1.5;c.stroke();
+    c.fillStyle='#212529';
+    const hasU=R.q&&R.q.unit;
+    fitText(c,fmt(a.v),-s*0.02,hasU?-s*0.08:0,lw*0.92,s*(hasU?0.3:0.36),'800');
+    if(hasU){c.fillStyle='#495057';fitText(c,R.q.unit,-s*0.02,s*0.14,lw*0.8,s*0.16,'700');}
+    c.restore();
+  });
+}
+function drawEffects(c){
+  R.particles.forEach(p=>{c.globalAlpha=clamp(p.life/p.max,0,1);c.fillStyle=p.color;c.beginPath();c.arc(p.x,p.y,p.size,0,6.283);c.fill();});
+  c.globalAlpha=1;
+  R.floats.forEach(f=>{const al=1-f.t/1.4;c.globalAlpha=clamp(al*1.4,0,1);c.fillStyle=f.color;c.strokeStyle='#fff';c.lineWidth=4;c.textAlign='center';c.textBaseline='middle';
+    c.font='800 '+Math.round(CELL*0.8)+'px ui-rounded,"Segoe UI",system-ui,sans-serif';const y=f.y-f.t*CELL*2.2;c.strokeText(f.text,f.x,y);c.fillText(f.text,f.x,y);});
+  c.globalAlpha=1;
+}
+
+/* ---------- Barre du haut (HUD sur une seule ligne) ---------- */
+function heart(c,x,y,s,col,stroke){
+  c.beginPath();c.moveTo(x,y+s*0.35);c.bezierCurveTo(x-s*0.9,y-s*0.3,x-s*0.5,y-s*0.9,x,y-s*0.35);c.bezierCurveTo(x+s*0.5,y-s*0.9,x+s*0.9,y-s*0.3,x,y+s*0.35);
+  if(col){c.fillStyle=col;c.fill();}if(stroke){c.strokeStyle=stroke;c.lineWidth=1.5;c.stroke();}
+}
+function drawHUD(c){
+  const hh=tbRows*CELL,two=tbRows>=2&&hh>=46,pad=Math.max(8,CELL*0.35);
+  c.save();c.fillStyle='#f4f6fd';c.fillRect(0,0,W,hh);c.fillStyle='rgba(60,70,140,0.18)';c.fillRect(0,hh-1.5,W,1.5);
+  // lien discret //Tom Rougeaud
+  const lf=Math.max(10,Math.min(13,CELL*0.32));c.font='600 '+lf+'px system-ui,sans-serif';c.textAlign='left';c.textBaseline='middle';
+  const ly=two?hh*0.26:hh*0.5,lt='//Tom Rougeaud',lw=c.measureText(lt).width;
+  c.fillStyle=S.hover==='link'?'#4c6ef5':'#adb5bd';c.fillText(lt,pad,ly);
+  addUI({id:'link',type:'link',x:pad-4,y:ly-lf,w:lw+8,h:lf*2});
+  // boutons à faible opacité
+  const bf=Math.max(11,Math.min(14,CELL*0.34)),by=two?hh*0.26:hh*0.5;
+  let rx=W-pad;const btns=W>=640?[['mute',SFX.isMuted()?'Son coupé':'Son'],['restart','Recommencer'],['pause',S.screen==='pause'?'Reprendre':'Pause']]:[['mute',SFX.isMuted()?'🔇':'🔊'],['restart','↻'],['pause',S.screen==='pause'?'▶':'⏸']];
+  btns.slice().reverse().forEach(b=>{c.font='700 '+bf+'px system-ui,sans-serif';const w=c.measureText(b[1]).width+bf*1.5,h=Math.min(hh*(two?0.42:0.66),bf*2.1),x=rx-w,y=by-h/2;
+    const on=S.hover===b[0];c.globalAlpha=on?1:0.55;c.fillStyle='#fff';rr(c,x,y,w,h,h/2);c.fill();c.strokeStyle='#bcc4e6';c.lineWidth=1.5;c.stroke();
+    c.fillStyle='#4a5384';c.textAlign='center';c.fillText(b[1],x+w/2,y+h/2+1);c.globalAlpha=1;addUI({id:b[0],type:'button',x:x,y:y,w:w,h:h});rx=x-bf*0.5;});
+  const btnLeft=rx;
+  // puces d’information
+  const s=S.set,ch=chapLabel(),hearts=R.maxLives;
+  const all=[
+    {k:'',v:(s.name||'—')+' · '+(s.klass||'—'),opt:3,col:'#4a5384'},
+    {k:'Chapitre',v:ch,opt:1,col:'#2f9e5b'},
+    {k:'Score',v:String(R.score),col:'#e8590c'},
+    {k:'Best',v:String(S.best),col:'#e67700'},
+    {k:'Niv.',v:R.diff+'/5',col:'#7048e8'},
+    {k:'Vitesse',v:Math.round(tickMsEff())+' ms',opt:2,col:'#1971c2'},
+    {k:'Temps',v:Math.ceil(R.timeLeft)+' s',col:R.timeLeft<=5?'#e03131':'#2b8a3e'},
+    {k:'Vies',hearts:true,col:'#e03131'},
+    {k:'Faux',v:R.wrongStreak+'/3',opt:2,col:'#c2255c'}
+  ];
+  const startX=(two?pad:pad+lw+pad*1.5),endX=two?W-pad:btnLeft-pad*0.5,avail=endX-startX,y=two?hh*0.72:hh*0.5;
+  let fs=Math.max(11,Math.min(16,CELL*0.4)),chips=all.slice(),total;
+  const measure=(f)=>{let t=0;chips.forEach((ch2,i)=>{c.font='600 '+(f*0.82)+'px system-ui,sans-serif';let w=ch2.k?c.measureText(ch2.k+' ').width:0;
+    if(ch2.hearts)w+=hearts*f*1.05;else{c.font='800 '+f+'px system-ui,sans-serif';w+=c.measureText(ch2.v).width;}t+=w+(i?f*1.4:0);});return t;};
+  for(let g=0;g<30;g++){total=measure(fs);if(total<=avail)break;if(fs>12)fs-=0.5;else{const drop=[3,2,1].find(o=>chips.some(x=>x.opt===o));if(drop)chips=chips.filter(x=>x.opt!==drop);else break;}}
+  let x=startX+(avail>total&&!two?(avail-total)/2:0);
+  chips.forEach((ch2,i)=>{
+    if(i){c.fillStyle='#ced4da';c.fillRect(x-fs*0.7,y-fs*0.6,1.5,fs*1.2);}
+    c.textAlign='left';c.textBaseline='middle';
+    if(ch2.k){c.font='600 '+(fs*0.82)+'px system-ui,sans-serif';c.fillStyle='#868e96';c.fillText(ch2.k,x,y);x+=c.measureText(ch2.k+' ').width;}
+    if(ch2.hearts){for(let h=0;h<hearts;h++){heart(c,x+fs*0.5+h*fs*1.05,y,fs*0.62,h<R.lives?'#ff4d6d':null,h<R.lives?null:'#ced4da');}x+=hearts*fs*1.05;}
+    else{c.font='800 '+fs+'px system-ui,sans-serif';c.fillStyle=ch2.col;c.fillText(ch2.v,x,y);x+=c.measureText(ch2.v).width;}
+    x+=fs*1.4;
+  });
+  c.restore();
+}
+
+/* ---------- Composition d’une image complète ---------- */
+function drawTopBarLite(c){
+  const hh=tbRows*CELL,pad=Math.max(8,CELL*0.35);
+  c.save();c.fillStyle='#f4f6fd';c.fillRect(0,0,W,hh);c.fillStyle='rgba(60,70,140,0.18)';c.fillRect(0,hh-1.5,W,1.5);
+  const lf=Math.max(10,Math.min(13,CELL*0.32));c.font='600 '+lf+'px system-ui,sans-serif';c.textAlign='left';c.textBaseline='middle';
+  const lt='//Tom Rougeaud',lw=c.measureText(lt).width;c.fillStyle=S.hover==='link'?'#4c6ef5':'#adb5bd';c.fillText(lt,pad,hh/2);
+  addUI({id:'link',type:'link',x:pad-4,y:hh/2-lf,w:lw+8,h:lf*2});
+  c.fillStyle='#6c7bff';c.textAlign='center';c.font='800 '+Math.min(hh*0.5,22)+'px '+FONT;c.fillText('Maths Snake',W/2,hh/2+1);
+  c.restore();
+}
+function drawWorld(c,withPlay){
+  c.drawImage(bg,0,0,W,H);
+  drawStudents(c,S.t);drawProf(c,S.t);
+  if(withPlay&&R){drawBoardText(c,'play');drawAnswers(c);drawSnake(c);drawBubble(c);drawEffects(c);}
+  else{drawBoardText(c,'welcome');drawTopBarLite(c);}
+}
+
+/* =========================================================
+   6. INTERFACE 100 % CANVAS : éléments ui[], hitTest, boutons, curseurs, champs
+   ========================================================= */
+let ui=[];
+function clearUI(){ui=[];}
+function addUI(e){ui.push(e);}
+function hitTest(px,py){for(let i=ui.length-1;i>=0;i--){const e=ui[i];if(px>=e.x&&px<=e.x+e.w&&py>=e.y&&py<=e.y+e.h)return e;}return null;}
+const FONT='ui-rounded,"Nunito","Segoe UI",system-ui,sans-serif';
+const fu=()=>clamp(Math.min(W,H)/40,11,19);
+
+function drawCard(c,x,y,w,h,alpha){
+  c.save();c.fillStyle='rgba(40,50,100,0.25)';rr(c,x+3,y+8,w,h,24);c.fill();
+  c.globalAlpha=alpha||0.97;c.fillStyle='#fff';rr(c,x,y,w,h,24);c.fill();c.globalAlpha=1;
+  c.strokeStyle='#dfe5fb';c.lineWidth=2;rr(c,x,y,w,h,24);c.stroke();c.restore();
+}
+function drawButton(c,id,x,y,w,h,label,o){
+  o=o||{};const on=S.hover===id,col=o.color||'#6c7bff',dis=o.disabled;
+  c.save();
+  const lift=on&&!dis?3:0;
+  c.fillStyle=dis?'#ced4da':shade(col,-0.3);rr(c,x,y+4-lift,w,h,h*0.42);c.fill();
+  c.fillStyle=dis?'#e9ecef':(on?shade(col,0.12):col);rr(c,x,y-lift,w,h,h*0.42);c.fill();
+  if(o.sel){c.strokeStyle='#212529';c.lineWidth=3;rr(c,x-2,y-lift-2,w+4,h+4,h*0.46);c.stroke();}
+  c.fillStyle=o.text||'#fff';c.textBaseline='middle';
+  fitText(c,label,x+w/2,y-lift+h/2+1,w*0.9,h*(o.size||0.44),'800');
+  c.restore();
+  if(!dis)addUI({id:id,type:'button',x:x,y:y-4,w:w,h:h+8});
+}
+function drawSlider(c,id,x,y,w,h,label,val,min,max,valText,hint,inv){
+  const f=h*0.34;c.save();c.textBaseline='middle';c.textAlign='left';
+  c.font='800 '+f+'px '+FONT;c.fillStyle='#3b4272';c.fillText(label,x,y+h*0.2);
+  c.textAlign='right';c.fillStyle='#e8590c';c.fillText(valText,x+w,y+h*0.2);
+  const ty=y+h*0.68,tr=h*0.12,t=clamp((val-min)/(max-min),0,1),k=inv?1-t:t;
+  c.fillStyle='#e7ebfb';rr(c,x,ty-tr,w,tr*2,tr);c.fill();
+  c.fillStyle='#6c7bff';rr(c,x,ty-tr,Math.max(tr*2,w*k),tr*2,tr);c.fill();
+  const kx=x+w*k;c.fillStyle='#fff';c.strokeStyle='#6c7bff';c.lineWidth=3;c.beginPath();c.arc(kx,ty,h*0.2,0,6.283);c.fill();c.stroke();
+  if(hint){c.textAlign='left';c.font='600 '+(f*0.72)+'px '+FONT;c.fillStyle='#868e96';c.fillText(hint[0],x,y+h*0.98);c.textAlign='right';c.fillText(hint[1],x+w,y+h*0.98);}
+  c.restore();
+  addUI({id:id,type:'slider',x:x-h*0.2,y:y+h*0.35,w:w+h*0.4,h:h*0.6,sx:x,sw:w,min:min,max:max,inv:!!inv});
+}
+function drawInput(c,id,x,y,w,h,label,value,ph){
+  const foc=S.focus===id;c.save();c.textBaseline='middle';
+  c.font='800 '+(h*0.3)+'px '+FONT;c.textAlign='left';c.fillStyle='#3b4272';c.fillText(label,x+4,y-h*0.02);
+  const by=y+h*0.18,bh=h*0.8;
+  c.fillStyle=foc?'#fff':'#f4f6fd';rr(c,x,by,w,bh,bh*0.3);c.fill();c.strokeStyle=foc?'#6c7bff':'#c9d0ef';c.lineWidth=foc?3:2;c.stroke();
+  c.font='700 '+(bh*0.46)+'px '+FONT;c.fillStyle=value?'#212529':'#adb5bd';c.textAlign='left';
+  let txt=value||ph;const maxW=w-bh*0.6;while(c.measureText(txt).width>maxW&&txt.length>1)txt=txt.slice(1);
+  c.fillText(txt,x+bh*0.3,by+bh/2+1);
+  if(foc&&Math.floor(S.t*2)%2===0){const tw=value?c.measureText(txt).width:0;c.fillStyle='#6c7bff';c.fillRect(x+bh*0.3+tw+2,by+bh*0.2,2,bh*0.6);}
+  c.restore();addUI({id:id,type:'input',x:x,y:by,w:w,h:bh});
+}
+function wrapLines(c,text,maxW){
+  const words=String(text).split(' '),lines=[];let cur='';
+  words.forEach(w=>{const t=cur?cur+' '+w:w;if(c.measureText(t).width>maxW&&cur){lines.push(cur);cur=w;}else cur=t;});
+  if(cur)lines.push(cur);return lines;
+}
+function drawParas(c,paras,x,y,w,size,color,gap){
+  c.font='600 '+size+'px '+FONT;c.fillStyle=color||'#3b4272';c.textAlign='left';c.textBaseline='top';
+  paras.forEach(p=>{wrapLines(c,p,w).forEach(l=>{c.fillText(l,x,y);y+=size*1.3;});y+=gap||size*0.5;});return y;
+}
+function cardRect(wmax,hfrac){
+  const w=Math.min(wmax,W-CELL*1.2),top=(r0+(W>=640?2.4:3))*CELL,h=Math.min(H-top-CELL*0.5,H*hfrac);
+  return{x:(W-w)/2,y:top,w:w,h:h};
+}
+function veil(c,a){c.fillStyle='rgba(30,40,90,'+a+')';c.fillRect(0,0,W,H);}
+
+/* ---------- Écran « plein écran recommandé » ---------- */
+function drawFS(c){
+  drawWorld(c,false);veil(c,0.35);
+  const w=Math.min(W-CELL,560),h=Math.min(H*0.55,340),x=(W-w)/2,y=(H-h)/2;drawCard(c,x,y,w,h);
+  c.fillStyle='#3b4272';c.textBaseline='middle';fitText(c,'Plein écran recommandé',W/2,y+h*0.2,w*0.84,h*0.14,'800');
+  c.fillStyle='#5c6590';c.font='600 '+(h*0.065)+'px '+FONT;c.textAlign='center';
+  const ls=wrapLines(c,'Le jeu est plus grand et plus agréable en plein écran. Tu peux aussi continuer sans.',w*0.8);
+  ls.forEach((l,i)=>c.fillText(l,W/2,y+h*0.40+i*h*0.09));
+  drawButton(c,'fs_on',x+w*0.1,y+h*0.62,w*0.8,h*0.17,'Activer plein écran',{color:'#2f9e5b'});
+  drawButton(c,'fs_skip',x+w*0.25,y+h*0.83,w*0.5,h*0.11,'Continuer sans',{color:'#868e96',size:0.4});
+}
+/* ---------- Page 1 : C’est parti ! ---------- */
+function drawMenu1(c){
+  drawWorld(c,false);veil(c,0.12);
+  const k=cardRect(980,0.92),x=k.x,y=k.y,w=k.w,h=k.h;drawCard(c,x,y,w,h);
+  const p=Math.min(w,h)*0.045,iw=w-2*p;
+  c.fillStyle='#3b4272';c.textBaseline='middle';fitText(c,'C’est parti !',x+w/2,y+h*0.085,w*0.6,h*0.07,'800');
+  const narrow=W<640,ih=h*0.12;
+  if(narrow){drawInput(c,'in_name',x+p,y+h*0.15,iw,ih,'Nom',S.set.name,'Ton prénom');drawInput(c,'in_klass',x+p,y+h*0.28,iw,ih,'Classe',S.set.klass,'Ex : 2MRCU');}
+  else{drawInput(c,'in_name',x+p,y+h*0.15,iw*0.58,ih,'Nom',S.set.name,'Ton prénom');drawInput(c,'in_klass',x+p+iw*0.62,y+h*0.15,iw*0.38,ih,'Classe',S.set.klass,'Ex : 2MRCU');}
+  const gy=narrow?y+h*0.44:y+h*0.31;c.fillStyle='#3b4272';c.font='800 '+(h*0.04)+'px '+FONT;c.textAlign='left';c.fillText('Choisis un ou plusieurs modes',x+p+4,gy);
+  const items=CHAPS.map(c2=>({id:c2.id,label:c2.label,color:c2.color})).concat([{id:'TOUS',label:'Tous les chapitres',color:'#495057'}]);
+  const cols=narrow?2:4,rows=Math.ceil(items.length/cols),gh=(y+h*(narrow?0.80:0.60))-(gy+h*0.03),bh=Math.min(h*(narrow?0.085:0.1),(gh-(rows-1)*h*0.02)/rows),bw=(iw-(cols-1)*p*0.5)/cols;
+  items.forEach((it,i)=>{const cx=x+p+(i%cols)*(bw+p*0.5),cy=gy+h*0.03+Math.floor(i/cols)*(bh+h*0.02);
+    const on=it.id==='TOUS'?S.set.chaps.length===ALL_CH.length:S.set.chaps.indexOf(it.id)>=0;
+    drawButton(c,'chap:'+it.id,cx,cy,bw,bh,(on?'✓  ':'')+it.label,on?{color:it.color,sel:true,size:0.4}:{color:shade(it.color,0.72),text:shade(it.color,-0.45),size:0.4});});
+  c.fillStyle='#868e96';c.font='800 '+(h*0.032)+'px '+FONT;c.textAlign='left';c.textBaseline='middle';
+  const ry=y+h*(narrow?0.73:0.645),rf=h*(narrow?0.03:0.032);c.font='600 '+rf+'px '+FONT;c.fillStyle='#5c6590';
+  if(!narrow)TXT.rules.forEach((t,i)=>{const col=narrow?0:i%2,row=narrow?i:Math.floor(i/2),tx=x+p+(col?iw/2:0);let tt='•  '+t;const mw=narrow?iw:iw/2-p*0.3;while(c.measureText(tt).width>mw&&tt.length>6)tt=tt.slice(0,-2);if(tt!=='•  '+t)tt+='…';c.fillText(tt,tx,ry+row*rf*1.55);});
+  drawButton(c,'next',x+w*0.28,y+h*0.84,w*0.44,h*0.1,'SUIVANT  ›',{color:'#ff7a59'});
+  c.font='700 '+(h*0.034)+'px '+FONT;c.textBaseline='middle';
+  const fy=y+h*0.965,links=[['about','À propos'],['priv','Confidentialité']];
+  let lx=x+p;links.forEach(l=>{const tw=c.measureText(l[1]).width;c.fillStyle=S.hover===l[0]?'#4c6ef5':'#868e96';c.textAlign='left';c.fillText(l[1],lx,fy);addUI({id:l[0],type:'link',x:lx-4,y:fy-h*0.03,w:tw+8,h:h*0.06});lx+=tw+p;});
+  const mt=SFX.isMuted()?'Son : coupé':'Son : activé';c.textAlign='right';const mw=c.measureText(mt).width;c.fillStyle=S.hover==='mute'?'#4c6ef5':'#868e96';c.fillText(mt,x+w-p,fy);addUI({id:'mute',type:'link',x:x+w-p-mw-4,y:fy-h*0.03,w:mw+8,h:h*0.06});
+}
+/* ---------- Page 2 : Options ---------- */
+function drawMenu2(c){
+  drawWorld(c,false);veil(c,0.12);
+  const k=cardRect(900,0.92),x=k.x,y=k.y,w=k.w,h=k.h;drawCard(c,x,y,w,h);
+  const p=Math.min(w,h)*0.05,iw=w-2*p,narrow=W<640;
+  c.fillStyle='#3b4272';c.textBaseline='middle';fitText(c,'Options',x+w/2,y+h*0.075,w*0.5,h*0.085,'800');
+  const s=S.set,sh=narrow?h*0.14:h*0.17,cw=narrow?iw:iw*0.47;
+  const pos=narrow?[[0,0.13],[0,0.29],[0,0.45],[0,0.61]]:[[0,0.15],[0.53,0.15],[0,0.40],[0.53,0.40]];
+  const sl=[
+    ['sl_chrono','Chrono par question',s.chrono,20,60,s.chrono+' s',['20 s','60 s'],false],
+    ['sl_diff','Difficulté de départ',s.diff,1,5,s.diff+' / 5',['facile','difficile'],false],
+    ['sl_tick','Vitesse du serpent',s.tick,20,350,s.tick+' ms',['lent','rapide'],true],
+    ['sl_lives','Nombre de vies',s.lives,1,5,String(s.lives),['1','5'],false]];
+  sl.forEach((d,i)=>drawSlider(c,d[0],x+p+iw*pos[i][0],y+h*pos[i][1],cw,sh,d[1],d[2],d[3],d[4],d[5],d[6],d[7]));
+  const by=y+h*0.84,bh=h*0.1,bw=(iw-2*p*0.5)/3;
+  drawButton(c,'back',x+p,by,bw,bh,'‹  Retour',{color:'#868e96'});
+  drawButton(c,'start',x+p+bw+p*0.5,by,bw,bh,'Démarrer',{color:'#2f9e5b'});
+  drawButton(c,'rep',x+p+2*(bw+p*0.5),by,bw,bh,'Rapport élève',{color:'#6c7bff',size:0.38});
+}
+/* ---------- Pause ---------- */
+function drawPause(c){
+  drawWorld(c,true);veil(c,0.45);
+  const w=Math.min(W-CELL,620),h=Math.min(H*0.8,520),x=(W-w)/2,y=(H-h)/2;drawCard(c,x,y,w,h);
+  c.fillStyle='#3b4272';c.textBaseline='middle';fitText(c,'Pause',W/2,y+h*0.09,w*0.5,h*0.1,'800');
+  const bw=w*0.7,bx=x+(w-bw)/2,bh=h*0.1;
+  drawButton(c,'resume',bx,y+h*0.19,bw,bh,'Reprendre',{color:'#2f9e5b'});
+  drawButton(c,'restart',bx,y+h*0.32,bw,bh,'Recommencer',{color:'#ff7a59'});
+  drawButton(c,'menu',bx,y+h*0.45,bw,bh,'Menu',{color:'#6c7bff'});
+  c.fillStyle='#3b4272';c.font='800 '+(h*0.036)+'px '+FONT;c.textAlign='center';c.fillText('Raccourcis',W/2,y+h*0.63);
+  const sc=['Espace : pause / reprise','R : recommencer · M ou Échap : menu','Rapport élève : depuis l’écran de fin ou les options'].concat(['Flèches ou Z Q S D : diriger']);
+  c.fillStyle='#5c6590';c.font='600 '+(h*0.034)+'px '+FONT;sc.forEach((t,i)=>c.fillText(t,W/2,y+h*0.69+i*h*0.058));
+}
+/* ---------- Fin de partie ---------- */
+function drawEnd(c){
+  drawWorld(c,true);veil(c,0.5);
+  const w=Math.min(W-CELL*0.8,900),h=Math.min(H-CELL,760),x=(W-w)/2,y=(H-h)/2;drawCard(c,x,y,w,h);
+  const p=w*0.045,b=bilan(),g=b.g,s=S.set;
+  c.textBaseline='middle';c.fillStyle='#3b4272';fitText(c,'Fin de partie',W/2,y+h*0.06,w*0.6,h*0.06,'800');
+  c.fillStyle='#e03131';c.font='700 '+(h*0.032)+'px '+FONT;c.textAlign='center';c.fillText(R.over||'',W/2,y+h*0.115);
+  c.fillStyle='#5c6590';c.font='600 '+(h*0.027)+'px '+FONT;
+  const chLab=chapLabel()==='Tous'?'Tous chapitres':chapLabel();
+  c.fillText((s.name||'—')+' · '+(s.klass||'—')+' · '+stampFR(R.start)+' · '+chLab+' · niveau final '+R.diff+'/5',W/2,y+h*0.158);
+  // grosses stats
+  const st=[['Score',R.score,'#e8590c'],['Meilleur',S.best,'#e67700'],['Réussite',g.pct+' %','#2f9e5b'],['Temps moyen',g.avg+' s','#1971c2'],['Série max',R.bestStreak,'#c2255c']];
+  const sw=(w-2*p)/st.length;st.forEach((d,i)=>{const cx=x+p+sw*(i+0.5);c.fillStyle='#868e96';c.font='700 '+(h*0.024)+'px '+FONT;c.textAlign='center';c.fillText(d[0],cx,y+h*0.20);c.fillStyle=d[2];fitText(c,String(d[1]),cx,y+h*0.245,sw*0.9,h*0.05,'800');});
+  // tableau bilan
+  const ty=y+h*0.30,cols=['Chapitre','Bon','Faux','Temps','Bloqué','%','Moy.'],cw=[0.30,0.1,0.1,0.12,0.12,0.1,0.16];
+  const rowsK=Object.keys(b.rows),rh=Math.min(h*0.047,(h*0.30)/(rowsK.length+2));
+  let cx0=x+p;c.font='800 '+(rh*0.55)+'px '+FONT;c.fillStyle='#fff';c.fillStyle='#e7ebfb';rr(c,x+p,ty,w-2*p,rh,rh*0.3);c.fill();
+  c.fillStyle='#3b4272';cols.forEach((t,i)=>{c.textAlign=i?'center':'left';c.fillText(t,i?cx0+(w-2*p)*cw[i]/2:cx0+8,ty+rh/2);cx0+=(w-2*p)*cw[i];});
+  const line=(lab,o,i,bold)=>{let xx=x+p;const yy=ty+rh*(i+1.5);c.font=(bold?'800 ':'600 ')+(rh*0.52)+'px '+FONT;c.fillStyle=bold?'#3b4272':'#495057';
+    const vals=[lab,o.bon,o.faux,o.timeout,o['bloqué'],o.pct+' %',o.avg+' s'];
+    vals.forEach((v,j)=>{c.textAlign=j?'center':'left';c.fillText(String(v),j?xx+(w-2*p)*cw[j]/2:xx+8,yy);xx+=(w-2*p)*cw[j];});};
+  rowsK.forEach((k,i)=>line(CHAP_BY_ID[k].label,b.rows[k],i,false));line('GLOBAL',g,rowsK.length,true);
+  // à revoir
+  const miss=R.log.filter(r=>r.res!=='bon').slice(-3),my=ty+rh*(rowsK.length+3.1);
+  c.fillStyle='#3b4272';c.font='800 '+(h*0.03)+'px '+FONT;c.textAlign='left';c.fillText(miss.length?'À revoir':'Aucune erreur : bravo !',x+p,my);
+  c.font='600 '+(h*0.027)+'px '+FONT;c.fillStyle='#5c6590';
+  miss.forEach((r,i)=>{let t=r.text.replace(/\n/g,' ')+'  →  '+r.correct;while(c.measureText(t).width>w-2*p&&t.length>8)t=t.slice(0,-2);c.fillText(t,x+p,my+h*0.04*(i+1));});
+  // boutons
+  const bh=h*0.075,by=y+h*0.88,bw=(w-2*p-3*p*0.4)/4;
+  [['replay','Rejouer','#2f9e5b'],['menu','Menu','#6c7bff'],['repGame','Rapport : cette partie','#f08c00'],['repAll','Rapport : cumulé','#ff7a59']].forEach((d,i)=>drawButton(c,d[0],x+p+i*(bw+p*0.4),by,bw,bh,d[1],{color:d[2],size:0.4}));
+}
+/* ---------- Réglages du rapport élève (dépôt « MA CLASSE ») ---------- */
+function drawCheck(c,id,x,y,w,h,label,on){
+  const hov=S.hover===id,bs=h*0.62;c.save();
+  c.fillStyle=on?'#6c7bff':'#fff';c.strokeStyle=on?'#4c5bd4':'#adb5bd';c.lineWidth=2.5;rr(c,x,y+(h-bs)/2,bs,bs,bs*0.28);c.fill();c.stroke();
+  if(on){c.strokeStyle='#fff';c.lineWidth=bs*0.14;c.lineCap='round';c.lineJoin='round';c.beginPath();c.moveTo(x+bs*0.24,y+h/2+bs*0.02);c.lineTo(x+bs*0.43,y+h/2+bs*0.22);c.lineTo(x+bs*0.78,y+h/2-bs*0.2);c.stroke();}
+  c.fillStyle=hov?'#4c6ef5':'#3b4272';c.font='700 '+(h*0.42)+'px '+FONT;c.textAlign='left';c.textBaseline='middle';
+  let t=label;const mw=w-bs-h*0.3;while(c.measureText(t).width>mw&&t.length>8)t=t.slice(0,-2);if(t!==label)t+='…';
+  c.fillText(t,x+bs+h*0.3,y+h/2+1);c.restore();addUI({id:id,type:'button',x:x,y:y,w:w,h:h});
+}
+function drawRep(c){
+  drawWorld(c,false);veil(c,0.2);
+  const k=cardRect(900,0.94),x=k.x,y=k.y,w=k.w,h=k.h;drawCard(c,x,y,w,h);
+  const p=Math.min(w,h)*0.05,iw=w-2*p,r=S.set.report;
+  c.fillStyle='#3b4272';c.textBaseline='middle';fitText(c,'Rapport pour « MA CLASSE »',x+w/2,y+h*0.07,w*0.86,h*0.06,'800');
+  const fs=clamp(h*0.031,11,17);drawParas(c,['Ce fichier HTML reprend ton prénom et tes résultats. Choisis ce qu’il contient :'],x+p,y+h*0.125,iw,fs,'#5c6590',0);
+  const items=[['rp:stats','Statistiques',r.stats],['rp:qa','Questions et réponses',r.qa],['rp:errors','Erreurs',r.errors],['rp:review','Points à revoir',r.review],['rp:howto','Consigne « MA CLASSE »',r.howto]];
+  const ch=h*0.075;items.forEach((d,i)=>drawCheck(c,d[0],x+p,y+h*(0.22+i*0.088),iw,ch,d[1],d[2]));
+  const bw=(iw-p*0.4)/2,bh=h*0.085,by=y+h*0.67;
+  drawButton(c,'repGame',x+p,by,bw,bh,'Exporter : ma dernière partie',{color:'#f08c00',size:0.38,disabled:!(R&&R.log&&R.log.length)});
+  drawButton(c,'repAll',x+p+bw+p*0.4,by,bw,bh,'Exporter : parties cumulées',{color:'#ff7a59',size:0.38});
+  c.fillStyle='#868e96';fitText(c,'Historique sur cet appareil : '+S.histN+' partie'+(S.histN>1?'s':'')+' (40 max.)',x+w/2,y+h*0.79,iw,h*0.028,'600');
+  drawButton(c,'histClear',x+p,y+h*0.83,bw,bh,S.confirmClear>0?'Confirmer ?':'Effacer l’historique',{color:'#e03131',size:0.38});
+  drawButton(c,'backMenu',x+p+bw+p*0.4,y+h*0.83,bw,bh,'‹  Retour',{color:'#868e96'});
+}
+/* ---------- À propos / Confidentialité / Erreur ---------- */
+function drawTextPage(c,title,paras,priv){
+  drawWorld(c,false);veil(c,0.25);
+  const k=cardRect(860,0.92),x=k.x,y=k.y,w=k.w,h=k.h;drawCard(c,x,y,w,h);
+  const p=Math.min(w,h)*0.06;c.fillStyle='#3b4272';c.textBaseline='middle';fitText(c,title,x+w/2,y+h*0.075,w*0.6,h*0.08,'800');
+  const fs=clamp(h*0.036,12,20);drawParas(c,paras,x+p,y+h*0.15,w-2*p,fs,'#3b4272',fs*0.6);
+  const bh=h*0.09,by=y+h*0.88;
+  if(priv){const bw=(w-2*p-2*p*0.4)/3,yy=y+h*0.76;
+    drawButton(c,'dataExport',x+p,yy,bw,bh,'Exporter',{color:'#6c7bff',size:0.4});drawButton(c,'dataImport',x+p+bw+p*0.4,yy,bw,bh,'Importer',{color:'#1971c2',size:0.4});
+    drawButton(c,'dataClear',x+p+2*(bw+p*0.4),yy,bw,bh,S.confirmClear>0?'Confirmer ?':'Effacer',{color:'#e03131',size:0.4});}
+  drawButton(c,'backMenu',x+w*0.3,by,w*0.4,bh,'‹  Retour',{color:'#868e96'});
+}
+function drawError(c){
+  c.fillStyle='#fff5f5';c.fillRect(0,0,W,H);
+  const w=Math.min(W-CELL,560),h=Math.min(H*0.6,360),x=(W-w)/2,y=(H-h)/2;drawCard(c,x,y,w,h);
+  c.fillStyle='#e03131';c.textBaseline='middle';fitText(c,'Erreur interne',W/2,y+h*0.17,w*0.7,h*0.13,'800');
+  c.fillStyle='#5c6590';c.font='600 '+(h*0.055)+'px '+FONT;c.textAlign='center';
+  wrapLines(c,'Un problème est survenu. Ta partie est perdue, mais le jeu est intact. Reviens au menu pour recommencer.',w*0.8).forEach((l,i)=>c.fillText(l,W/2,y+h*0.38+i*h*0.075));
+  c.fillStyle='#adb5bd';c.font='600 '+(h*0.04)+'px '+FONT;c.fillText(String(S.err).slice(0,70),W/2,y+h*0.66);
+  drawButton(c,'menu',x+w*0.25,y+h*0.74,w*0.5,h*0.15,'Retour menu',{color:'#6c7bff'});
+}
+
+/* =========================================================
+   6b. RAPPORT ÉLÈVE (fichier HTML autonome à déposer dans « MA CLASSE »)
+   ========================================================= */
+function histCount(){try{const h=store.get('history',[]);return Array.isArray(h)?h.length:0;}catch(e){return 0;}}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+function collectGames(mode){
+  if(mode==='game')return(R&&R.log&&R.log.length)?[runToGame(R)]:[];
+  let h=store.get('history',[]);h=Array.isArray(h)?h.slice():[];
+  if(R&&R.log&&R.log.length&&!R.saved)h.push(runToGame(R));
+  return h;
+}
+function aggRows(rows){
+  const o={tot:rows.length,bon:0,faux:0,timeout:0,'bloqué':0,sec:0,n:0};
+  rows.forEach(r=>{if(o[r.res]!==undefined)o[r.res]++;if(r.res==='bon'||r.res==='faux'){o.sec+=(+r.sec||0);o.n++;}});
+  o.pct=o.tot?Math.round(100*o.bon/o.tot):0;o.avg=o.n?Math.round(10*o.sec/o.n)/10:0;return o;
+}
+function buildReport(games,mode){
+  const s=S.set,rp=s.report,name=(s.name||'').trim()||'Élève',klass=(s.klass||'').trim()||'—';
+  const rows=[];games.forEach((g,gi)=>(g.log||[]).forEach(r=>rows.push(Object.assign({g:gi+1,date:g.date},r))));
+  const all=aggRows(rows),byCh={};rows.forEach(r=>{(byCh[r.chap]||(byCh[r.chap]=[])).push(r);});
+  const best=games.reduce((m,g)=>Math.max(m,g.score||0),0),totScore=games.reduce((m,g)=>m+(g.score||0),0);
+  const fname='MathsSnake_Rapport_'+who()+(mode==='all'?'_cumul':'')+'.html';
+  const lab=k=>CHAP_BY_ID[k]?CHAP_BY_ID[k].label:k;
+  const errs=rows.filter(r=>r.res!=='bon');
+  let h='<!DOCTYPE html>\n<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rapport Maths Snake — '+esc(name)+'</title>'
+   +'<style>body{font-family:system-ui,"Segoe UI",sans-serif;background:#f4f6fd;color:#2b2f4a;margin:0;padding:18px}main{max-width:900px;margin:auto;background:#fff;border-radius:18px;padding:22px 26px;box-shadow:0 6px 24px rgba(60,70,140,.18)}h1{margin:0;color:#3b4272}h2{color:#6c7bff;border-bottom:2px solid #e7ebfb;padding-bottom:4px;margin-top:26px}.sub{color:#6b7280;margin:4px 0 14px}.box{background:#fff8e1;border:2px solid #ffd43b;border-radius:14px;padding:10px 16px}.cards{display:flex;flex-wrap:wrap;gap:10px}.card{flex:1;min-width:120px;background:#f4f6fd;border-radius:12px;padding:8px 12px;text-align:center}.card b{display:block;font-size:1.6em;color:#e8590c}table{border-collapse:collapse;width:100%;font-size:.92em;margin-top:8px}th,td{border:1px solid #dfe5fb;padding:5px 8px;text-align:left;vertical-align:top}th{background:#e7ebfb}.ok{color:#2b8a3e;font-weight:700}.ko{color:#e03131;font-weight:700}.mut{color:#868e96;font-size:.85em}footer{margin-top:24px;color:#868e96;font-size:.8em}@media print{body{background:#fff;padding:0}main{box-shadow:none}}</style></head><body><main>';
+  h+='<h1>Rapport Maths Snake</h1><p class="sub"><b>Prénom : '+esc(name)+'</b> · Classe : '+esc(klass)+' · '+(mode==='all'?games.length+' partie'+(games.length>1?'s':'')+' cumulée'+(games.length>1?'s':''):'Partie du '+esc(stampFR(new Date(games[0].date))))+' · Exporté le '+esc(stampFR())+'</p>';
+  if(rp.howto)h+='<div class="box"><b>Comment rendre ce rapport à ton professeur</b><ol><li>Enregistre ce fichier sur l’ordinateur (nom : <code>'+esc(fname)+'</code>).</li><li>Ouvre ta session informatique, puis l’espace <b>« MA CLASSE »</b>.</li><li>Dépose ce fichier dans l’espace « MA CLASSE » (glisser-déposer ou bouton de dépôt).</li><li>Vérifie qu’il apparaît bien dans la liste, puis préviens ton professeur.</li></ol></div>';
+  if(rp.stats){
+    h+='<h2>Statistiques</h2><div class="cards"><div class="card"><b>'+games.length+'</b>partie'+(games.length>1?'s':'')+'</div><div class="card"><b>'+(mode==='all'?totScore:(games[0].score||0))+'</b>'+(mode==='all'?'points au total':'points')+'</div><div class="card"><b>'+best+'</b>meilleur score</div><div class="card"><b>'+all.pct+' %</b>de réussite</div><div class="card"><b>'+all.avg+' s</b>temps moyen</div></div>';
+    h+='<table><tr><th>Chapitre</th><th>Questions</th><th>Bon</th><th>Faux</th><th>Temps écoulé</th><th>Bloqué</th><th>Réussite</th><th>Temps moyen</th></tr>';
+    Object.keys(byCh).forEach(k=>{const a=aggRows(byCh[k]);h+='<tr><td>'+esc(lab(k))+'</td><td>'+a.tot+'</td><td>'+a.bon+'</td><td>'+a.faux+'</td><td>'+a.timeout+'</td><td>'+a['bloqué']+'</td><td>'+a.pct+' %</td><td>'+a.avg+' s</td></tr>';});
+    h+='<tr><th>Global</th><th>'+all.tot+'</th><th>'+all.bon+'</th><th>'+all.faux+'</th><th>'+all.timeout+'</th><th>'+all['bloqué']+'</th><th>'+all.pct+' %</th><th>'+all.avg+' s</th></tr></table>';
+    if(mode==='all'&&games.length>1){h+='<table><tr><th>Partie</th><th>Date</th><th>Chapitres</th><th>Niveau final</th><th>Score</th><th>Fin</th></tr>';
+      games.forEach((g,i)=>{h+='<tr><td>'+(i+1)+'</td><td>'+esc(stampFR(new Date(g.date)))+'</td><td>'+esc((g.chaps||[]).map(lab).join(', '))+'</td><td>'+(g.diff||'')+'/5</td><td>'+(g.score||0)+'</td><td>'+esc(g.over||'')+'</td></tr>';});h+='</table>';}
+  }
+  if(rp.review){
+    h+='<h2>Mes points à revoir</h2>';
+    const weak=Object.keys(byCh).filter(k=>{const a=aggRows(byCh[k]);return a.tot>=3&&a.pct<70;});
+    const byWhy={};errs.forEach(r=>{if(r.why&&WHY[r.why]){(byWhy[r.why]||(byWhy[r.why]=[])).push(r);}});
+    const whyKeys=Object.keys(byWhy).sort((a,b)=>byWhy[b].length-byWhy[a].length).slice(0,6);
+    const cnt={};errs.forEach(r=>{const k=r.chap+'|'+String(r.text).replace(/\n/g,' ');cnt[k]=cnt[k]||{n:0,r:r};cnt[k].n++;});
+    const top=Object.values(cnt).sort((a,b)=>b.n-a.n).slice(0,5);
+    if(!errs.length)h+='<p class="ok">Aucune erreur : continue comme ça !</p>';
+    else{
+      if(weak.length)h+='<p><b>Chapitres à retravailler</b> (moins de 70 % de réussite) : '+weak.map(k=>esc(lab(k))+' ('+aggRows(byCh[k]).pct+' %)').join(', ')+'.</p>';
+      if(whyKeys.length){h+='<p><b>Tes erreurs les plus fréquentes</b></p><ul>';whyKeys.forEach(k=>{const e=byWhy[k][0];h+='<li><b>'+esc(WHY[k])+'</b> <span class="mut">('+byWhy[k].length+' fois)</span><br><span class="mut">Exemple : '+esc(String(e.text).replace(/\n/g,' '))+' → tu as répondu '+esc(e.chosen)+', la bonne réponse était '+esc(e.correct)+'.</span></li>';});h+='</ul>';}
+      h+='<p><b>Questions à refaire</b></p><ul>'+top.map(t=>'<li>'+esc(lab(t.r.chap))+' : '+esc(String(t.r.text).replace(/\n/g,' '))+' → <b>'+esc(t.r.correct)+'</b>'+(t.n>1?' <span class="mut">(ratée '+t.n+' fois)</span>':'')+(t.r.sol?'<br><span class="mut">'+esc(t.r.sol)+'</span>':'')+'</li>').join('')+'</ul>';
+    }
+  }
+  if(rp.errors){
+    h+='<h2>Mes erreurs</h2>';
+    if(!errs.length)h+='<p class="ok">Aucune erreur.</p>';
+    else{h+='<table><tr><th>Question</th><th>Ma réponse</th><th>Bonne réponse</th><th>Résultat</th><th>Explication</th></tr>';
+      errs.slice(-300).forEach(r=>{h+='<tr><td>'+esc(lab(r.chap))+' : '+esc(String(r.text).replace(/\n/g,' '))+'</td><td class="ko">'+esc(r.chosen)+'</td><td class="ok">'+esc(r.correct)+'</td><td>'+esc(r.res==='faux'?'Faux':(r.res==='timeout'?'Temps écoulé':'Bloqué'))+'</td><td>'+esc((r.why&&WHY[r.why])||r.sol||'')+'</td></tr>';});h+='</table>';}
+  }
+  if(rp.qa){
+    h+='<h2>Mes questions et mes réponses</h2><table><tr><th>N°</th><th>Question</th><th>Ma réponse</th><th>Bonne réponse</th><th></th><th>Temps</th></tr>';
+    rows.slice(-500).forEach((r,i)=>{h+='<tr><td>'+(mode==='all'?r.g+'.':'')+r.n+'</td><td>'+esc(lab(r.chap))+' : '+esc(String(r.text).replace(/\n/g,' '))+'</td><td>'+esc(r.chosen)+'</td><td>'+esc(r.correct)+'</td><td class="'+(r.res==='bon'?'ok':'ko')+'">'+(r.res==='bon'?'✓':'✗')+'</td><td>'+esc(r.sec)+' s</td></tr>';});h+='</table>';
+  }
+  h+='<footer>Généré par Maths Snake — Tom Rougeaud — CC BY-NC 4.0. Ce fichier est créé sur ton appareil : rien n’a été envoyé sur internet.</footer></main></body></html>';
+  return{html:h,fname:fname};
+}
+function exportReport(mode){
+  try{
+    const games=collectGames(mode);
+    if(!games.length){toast('Aucune partie à exporter');return;}
+    const r=buildReport(games,mode);
+    toast(downloadBlob(r.html,'text/html;charset=utf-8',r.fname)?'Rapport exporté : '+r.fname:'Export impossible');
+  }catch(e){toast('Export impossible');}
+}
+
+/* =========================================================
+   7. EXPORTS (CSV / HTML / données locales)
+   ========================================================= */
+function toast(t){S.msg=t;S.msgT=2.6;}
+function who(){return safeFileName((S.set.name||'joueur')+'_'+(S.set.klass||'classe'));}
+function dataExport(){toast(downloadBlob(JSON.stringify({app:APP,ver:VER,data:store.dump()},null,1),'application/json','MathsSnake_donnees.json')?'Données exportées':'Export impossible');}
+function dataImport(){
+  try{const f=document.createElement('input');f.type='file';f.accept='.json,application/json';
+    f.onchange=()=>{const file=f.files&&f.files[0];if(!file)return;const rd=new FileReader();
+      rd.onload=()=>{try{const o=JSON.parse(String(rd.result)),d=o&&o.data;if(!d||o.app!==APP)throw new Error('format');
+        if(d.settings&&typeof d.settings==='object'){Object.keys(DEF).forEach(k=>{if(k in d.settings)S.set[k]=d.settings[k];});}
+        if(typeof d.best==='number'&&isFinite(d.best))S.best=Math.max(0,Math.floor(d.best));
+        sanitizeSettings();saveSettings();store.set('best',S.best);toast('Données importées');}catch(e){toast('Fichier non valide');}};
+      rd.readAsText(file);};f.click();}catch(e){toast('Import impossible');}
+}
+function dataClear(){
+  if(S.confirmClear>0){store.clearAll();Object.assign(S.set,DEF);S.set.chaps=ALL_CH.slice();S.set.report=Object.assign({},DEF.report);S.best=0;S.histN=0;SFX.setMuted(false);S.confirmClear=0;toast('Données effacées');}
+  else S.confirmClear=4;
+}
+function tryFullscreen(){
+  try{const el=document.getElementById('card'),f=el.requestFullscreen||el.webkitRequestFullscreen;if(f){const r=f.call(el);if(r&&r.catch)r.catch(()=>{});}}catch(e){}
+}
+
+/* =========================================================
+   8. ENTRÉES : souris / tactile / clavier / champs texte
+   ========================================================= */
+const FIELD={in_name:['name',24],in_klass:['klass',16]};
+function focusInput(id){
+  S.focus=id;const f=FIELD[id];cap.value=S.set[f[0]]||'';
+  try{cap.focus({preventScroll:true});cap.setSelectionRange(cap.value.length,cap.value.length);}catch(e){}
+}
+function blurInput(){S.focus=null;try{cap.blur();cv.focus({preventScroll:true});}catch(e){}}
+cap.addEventListener('input',()=>{const f=FIELD[S.focus];if(!f)return;S.set[f[0]]=cap.value.slice(0,f[1]);saveSettings();});
+cap.addEventListener('blur',()=>{S.focus=null;});
+function setSlider(e,px){
+  let t=clamp((px-e.sx)/e.sw,0,1);if(e.inv)t=1-t;const v=Math.round(e.min+t*(e.max-e.min));
+  const k={sl_chrono:'chrono',sl_diff:'diff',sl_tick:'tick',sl_lives:'lives'}[e.id];
+  if(k&&S.set[k]!==v){S.set[k]=v;saveSettings();}
+}
+function goMenu(){S.screen='menu1';blurInput();}
+function handleButton(id){
+  SFX.unlock();SFX.click();
+  if(id.indexOf('chap:')===0){const k=id.slice(5),cs=S.set.chaps;
+    if(k==='TOUS')S.set.chaps=ALL_CH.slice();
+    else{const i=cs.indexOf(k);if(i>=0){if(cs.length>1)cs.splice(i,1);}else{cs.push(k);S.set.chaps=ALL_CH.filter(x=>cs.indexOf(x)>=0);}}
+    saveSettings();return;}
+  if(id.indexOf('rp:')===0){const k=id.slice(3);S.set.report[k]=!S.set.report[k];saveSettings();return;}
+  switch(id){
+    case'fs_on':tryFullscreen();S.screen='menu1';break;
+    case'fs_skip':S.screen='menu1';break;
+    case'next':S.screen='menu2';break;
+    case'back':S.screen='menu1';break;
+    case'start':case'replay':startGame();break;
+    case'restart':startGame();break;
+    case'resume':S.screen='play';break;
+    case'pause':if(S.screen==='play')S.screen='pause';else if(S.screen==='pause')S.screen='play';break;
+    case'menu':goMenu();break;
+    case'about':S.from=S.screen;S.screen='about';break;
+    case'priv':S.from=S.screen;S.screen='priv';break;
+    case'backMenu':S.screen=S.from||'menu1';break;
+    case'mute':S.set.mute=!SFX.isMuted();SFX.setMuted(S.set.mute);saveSettings();break;
+    case'rep':S.from=S.screen;S.histN=histCount();S.screen='rep';break;
+    case'repGame':exportReport('game');break;
+    case'repAll':exportReport('all');break;
+    case'histClear':if(S.confirmClear>0){store.set('history',[]);S.histN=0;S.confirmClear=0;toast('Historique effacé');}else S.confirmClear=4;break;
+    case'dataExport':dataExport();break;
+    case'dataImport':dataImport();break;
+    case'dataClear':dataClear();break;
+    case'link':try{window.open(LINKEDIN,'_blank','noopener');}catch(e){}break;
+  }
+}
+let swipe=null,drag=null;
+function ptr(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)};}
+cv.addEventListener('pointerdown',e=>{
+  const p=ptr(e),h=hitTest(p.x,p.y);
+  try{cv.setPointerCapture(e.pointerId);}catch(_){}
+  if(h){
+    if(h.type==='slider'){drag=h;setSlider(h,p.x);SFX.unlock();}
+    else if(h.type==='input'){SFX.unlock();}
+    else{if(S.focus)blurInput();handleButton(h.id);}
+    return;
+  }
+  if(S.focus)blurInput();
+  if(S.screen==='play')swipe={x:p.x,y:p.y};
+});
+cv.addEventListener('pointermove',e=>{
+  const p=ptr(e);
+  if(drag){setSlider(drag,p.x);return;}
+  const h=hitTest(p.x,p.y);S.hover=h?h.id:null;cv.style.cursor=h?(h.type==='input'?'text':'pointer'):'default';
+  if(swipe&&S.screen==='play'){const dx=p.x-swipe.x,dy=p.y-swipe.y;
+    if(Math.hypot(dx,dy)>Math.max(12,CELL*0.35)){pushDir(Math.abs(dx)>Math.abs(dy)?{x:Math.sign(dx),y:0}:{x:0,y:Math.sign(dy)});swipe={x:p.x,y:p.y};}}
+});
+cv.addEventListener('click',e=>{ // le focus du champ caché se prend au clic (après le focus natif du canvas)
+  const p=ptr(e),h=hitTest(p.x,p.y);if(h&&h.type==='input')focusInput(h.id);
+});
+function endPtr(){drag=null;swipe=null;}
+cv.addEventListener('pointerup',endPtr);cv.addEventListener('pointercancel',endPtr);
+cv.addEventListener('pointerleave',()=>{S.hover=null;});
+
+document.addEventListener('keydown',e=>{
+  try{
+    if(e.ctrlKey||e.metaKey||e.altKey)return;
+    const k=e.key;
+    if(S.focus){if(k==='Enter'||k==='Escape'||k==='Tab'){e.preventDefault();blurInput();}return;}
+    const lk=k.length===1?k.toLowerCase():k;
+    const dmap={ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0},z:{x:0,y:-1},w:{x:0,y:-1},s:{x:0,y:1},q:{x:-1,y:0},a:{x:-1,y:0},d:{x:1,y:0}};
+    if(S.screen==='play'&&dmap[lk]){e.preventDefault();pushDir(dmap[lk]);return;}
+    if(k===' '){e.preventDefault();if(S.screen==='play')S.screen='pause';else if(S.screen==='pause')S.screen='play';return;}
+    if(S.screen==='fs'){if(k==='Enter')handleButton('fs_on');return;}
+    if(lk==='r'&&(S.screen==='play'||S.screen==='pause'||S.screen==='end')){startGame();return;}
+    if(lk==='m'||k==='Escape'){if(S.screen!=='menu1'){if(S.screen==='about'||S.screen==='priv')S.screen=S.from||'menu1';else goMenu();}return;}
+    if(k==='Enter'){if(S.screen==='menu1')S.screen='menu2';else if(S.screen==='menu2')startGame();else if(S.screen==='end')startGame();else if(S.screen==='pause')S.screen='play';return;}
+    if(S.screen==='play'&&R&&/^[0-9+\-*]$/.test(k)){
+      R.cheat.buf=(R.cheat.buf+k).slice(-3);const b=R.cheat.buf;
+      if(b==='194'){R.cheat.show=7;R.cheat.used.push('194');R.cheat.buf='';floater(W/2,H*0.45,'Indice !','#f08c00');}
+      else if(b==='+++'){R.speedMult=Math.min(4,R.speedMult*1.5);R.cheat.used.push('+++');R.cheat.buf='';floater(W/2,H*0.45,'Vitesse +50 %','#1971c2');}
+      else if(b==='---'){R.speedMult=Math.max(0.25,R.speedMult/1.5);R.cheat.used.push('---');R.cheat.buf='';floater(W/2,H*0.45,'Vitesse −','#1971c2');}
+      else if(b==='***'){R.diff=Math.min(5,R.diff+1);R.cheat.used.push('***');R.cheat.buf='';floater(W/2,H*0.45,'Niveau '+R.diff,'#7048e8');}
+    }
+  }catch(err){S.err=String(err&&err.message||err);S.screen='error';}
+});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&S.screen==='play')S.screen='pause';});
+
+/* =========================================================
+   9. BOUCLE PRINCIPALE + GARDE-FOU ANTI-CRASH
+   ========================================================= */
+function resize(){
+  const r=cv.getBoundingClientRect();DPR=clamp(window.devicePixelRatio||1,1,3);
+  W=Math.max(320,r.width);H=Math.max(300,r.height);
+  cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  const oc=COLS,or=ROWS;buildWorld();buildBg();
+  if(R&&!R.over&&(oc!==COLS||or!==ROWS)){relayoutRun();if(S.screen==='play')S.screen='pause';}
+}
+function render(){
+  const c=ctx;c.setTransform(DPR,0,0,DPR,0,0);c.clearRect(0,0,W,H);clearUI();
+  const sc=S.screen;
+  if(sc==='play'||sc==='pause'){
+    if(sc==='play'){
+      c.save();if(R.shake>0)c.translate((Math.random()-0.5)*CELL*0.3*(R.shake/0.45),(Math.random()-0.5)*CELL*0.3*(R.shake/0.45));
+      drawWorld(c,true);c.restore();
+    }else drawPause(c);
+    drawHUD(c);
+  }
+  else if(sc==='end')drawEnd(c);
+  else if(sc==='menu1')drawMenu1(c);
+  else if(sc==='menu2')drawMenu2(c);
+  else if(sc==='rep')drawRep(c);
+  else if(sc==='about')drawTextPage(c,TXT.aboutTitle,TXT.about,false);
+  else if(sc==='priv')drawTextPage(c,TXT.privTitle,TXT.priv,true);
+  else if(sc==='error')drawError(c);
+  else drawFS(c);
+  if(S.msgT>0){const t=S.msg,f=fu()*1.1;c.save();c.font='800 '+f+'px '+FONT;const w=c.measureText(t).width+f*2;c.globalAlpha=clamp(S.msgT,0,1);
+    c.fillStyle='#212529';rr(c,W/2-w/2,H-f*3.2,w,f*2,f);c.fill();c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';c.fillText(t,W/2,H-f*2.2);c.restore();}
+}
+let lastTs=0;
+function frame(ts){
+  requestAnimationFrame(frame);
+  const dt=Math.min(0.05,Math.max(0,(ts-lastTs)/1000||0));lastTs=ts;
+  try{
+    if(S.confirmClear>0){S.confirmClear-=dt;}
+    if(S.screen!=='error')update(dt);
+    render();
+  }catch(e){
+    S.err=String(e&&e.message||e);S.screen='error';try{console.error(e);}catch(_){}
+    try{ctx.setTransform(DPR,0,0,DPR,0,0);clearUI();drawError(ctx);}catch(_){}
+  }
+}
+window.addEventListener('resize',resize);window.addEventListener('orientationchange',()=>setTimeout(resize,200));
+resize();
+try{cv.focus({preventScroll:true});}catch(e){}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
