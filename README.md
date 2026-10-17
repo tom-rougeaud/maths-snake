@@ -20,6 +20,7 @@
 - Vitesse dynamique : le jeu accélère à chaque bonne réponse et ralentit à chaque erreur ; le prof sursaute (bond ou salto) et le texte passe en rouge.
 - Mobile : réglage « Zoom de la salle » (5 niveaux) dans les options.
 - Pause : Espace ou Entrée (PC), double-tape (mobile). Bouton « Plein écran » dans l’en-tête quand on quitte le plein écran. Téléphone en paysage : salle large et dézoomée (menus en portrait).
+- Installation automatique sur l’écran d’accueil (PWA : manifest + service worker) : plein écran, paysage, hors connexion. Menus utilisables en paysage (colonne qui défile).
 - Clavier (flèches ou ZQSD) ou **swipe** sur mobile.
 - **Affichage mobile dédié** (portrait, détecté même si le navigateur est en « version ordinateur ») : plein écran, grille plus grosse, cahiers de réponses agrandis, menus tactiles, pages « À propos » et « Confidentialité » défilantes ; en paysage sur téléphone, le jeu demande de tourner l’écran.
 - **Rapport élève** (fichier HTML : prénom, statistiques, questions, erreurs, points à revoir, consigne de dépôt dans « MA CLASSE »), pour une partie ou les parties cumulées.
