@@ -396,7 +396,7 @@ const oppDir=(a,b)=>a.x===-b.x&&a.y===-b.y;
 
 function buildWorld(){
   if(MOB){ // mobile / tablette en portrait : grille plus grosse (cases d’environ 32 px), 2 colonnes de tables
-    COLS=clamp(Math.round(DW/36),9,14);CELL=W/COLS;
+    COLS=clamp(Math.round(DW/27),10,17);CELL=W/COLS;
   }else{
     COLS=W>=900?36:(W>=640?30:20);
     CELL=Math.max(10,Math.floor(W/COLS));
@@ -420,7 +420,7 @@ function buildWorld(){
   let tRow0,totH,tw,th;
   if(MOB){
     const innerW=COLS-2; // 1 case de marge de chaque côté, plus de meubles : tout pour le terrain
-    tw=clamp(Math.floor((innerW-4)/2),2,3); // allée centrale large (≥ 4 cases) pour les cahiers 2×2
+    tw=clamp(Math.floor((innerW-4)/2),2,4); // allée centrale large (≥ 4 cases) pour les cahiers 2×2
     const aisle=innerW-2*tw;
     tRow0=r0+2;const rowsAvail=ROWS-1-tRow0,nr=rowsAvail>=10?3:(rowsAvail>=6?2:1);
     th=clamp(Math.floor((rowsAvail-(nr-1)*2)/nr),2,3);
@@ -651,6 +651,13 @@ function tickStep(){
       const m=wrapCell(head.x+d.x,head.y+d.y);if(!cellOK(m.x,m.y))continue;
       const sp=spaceFrom(m.x,m.y,70)+(sameDir(d,R.dir)?3:0);
       if(sp>bs){bs=sp;best={d:d,m:m};}
+    }
+    if(!best){ // pas d’issue : on tolère la bulle du prof (elle ne doit jamais emprisonner le serpent)
+      for(const d of shuffle(DIRS)){
+        if(oppDir(d,R.dir))continue;
+        const m=wrapCell(head.x+d.x,head.y+d.y);if(isSolid(m.x,m.y)||bodyHit(m.x,m.y,R.pend>0))continue;
+        best={d:d,m:m};break;
+      }
     }
     R.queue=[];
     if(best){moveTo(best.m,best.d);R.bump=0.3;R.stuck=0;SFX.bump();R.pace=0;}
