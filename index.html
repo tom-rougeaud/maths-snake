@@ -396,13 +396,13 @@ const oppDir=(a,b)=>a.x===-b.x&&a.y===-b.y;
 
 function buildWorld(){
   if(MOB){ // mobile / tablette en portrait : grille plus grosse (cases d’environ 32 px), 2 colonnes de tables
-    COLS=clamp(Math.round(DW/27),10,17);CELL=W/COLS;
+    COLS=clamp(Math.round(DW/[18,22,26,30,36][clamp((S.set.zoom|0)||3,1,5)-1]),9,26);CELL=W/COLS;
   }else{
     COLS=W>=900?36:(W>=640?30:20);
     CELL=Math.max(10,Math.floor(W/COLS));
   }
   ROWS=Math.max(12,Math.floor(H/CELL));
-  tbRows=MOB?2:(CELL>=36?1:Math.ceil(50/CELL));
+  tbRows=MOB?clamp(Math.ceil(58*K/CELL),2,4):(CELL>=36?1:Math.ceil(50/CELL));
   bdRows=MOB?clamp(Math.round((ROWS-tbRows)*0.24),ROWS<18?4:5,7):clamp(Math.round((ROWS-tbRows)*0.25),5,10);
   r0=tbRows+bdRows;
   const wide=COLS>=30;
@@ -572,11 +572,11 @@ function spawnAnswers(q){
    3. ÉTAT, PARTIE, MÉCANIQUE DU SERPENT
    ========================================================= */
 const ALL_CH=CHAPS.map(c=>c.id);
-const DEF={name:'',klass:'',chaps:ALL_CH.slice(),chrono:30,diff:1,tick:150,lives:3,mute:false,report:{stats:true,qa:true,errors:true,review:true,howto:true}};
+const DEF={name:'',klass:'',chaps:ALL_CH.slice(),chrono:30,diff:1,tick:150,lives:3,zoom:3,mute:false,report:{stats:true,qa:true,errors:true,review:true,howto:true}};
 const S={histN:0,screen:'fs',from:'menu1',set:Object.assign({},DEF,store.get('settings',{})||{}),best:Number(store.get('best',0))||0,t:0,err:'',focus:null,hover:null,scrollY:0,scrollMax:0,confirmClear:0,msg:'',msgT:0};
 function sanitizeSettings(){const s=S.set;
   s.chrono=clamp(Math.round(+s.chrono||30),20,60);s.diff=clamp(Math.round(+s.diff||1),1,5);
-  s.tick=clamp(Math.round(+s.tick||150),20,350);s.lives=clamp(Math.round(+s.lives||3),1,5);
+  s.tick=clamp(Math.round(+s.tick||150),20,350);s.lives=clamp(Math.round(+s.lives||3),1,5);s.zoom=clamp(Math.round(+s.zoom||3),1,5);
   s.name=String(s.name||'').slice(0,24);s.klass=String(s.klass||'').slice(0,16);
   if(s.chap&&CHAP_BY_ID[s.chap]&&!Array.isArray(s.chaps))s.chaps=[s.chap];delete s.chap;
   s.chaps=(Array.isArray(s.chaps)?s.chaps:[]).filter(k=>CHAP_BY_ID[k]);if(!s.chaps.length)s.chaps=ALL_CH.slice();
@@ -1549,14 +1549,15 @@ function drawMenu1M(c){
 /* ---------- Page 2 : Options ---------- */
 function drawMenu2M(c){
   drawWorld(c,false);veil(c,0.12);
-  const k=mCard(c),x=k.x,y=k.y,w=k.w,h=k.h,p=k.p,iw=w-2*p,need=570,u=mU(h,need),g=Math.min(Math.max(0,h-need*u)/6,30*u);
+  const k=mCard(c),x=k.x,y=k.y,w=k.w,h=k.h,p=k.p,iw=w-2*p,need=640,u=mU(h,need),g=Math.min(Math.max(0,h-need*u)/6,30*u);
   let cy=y+10*u+g*0.5;
   mTitle(c,'Options',k,cy+22*u,u);cy+=52*u+g;
   const s=S.set,sh=66*u,sl=[
     ['sl_chrono','Chrono par question',s.chrono,20,60,s.chrono+' s',['20 s','60 s'],false],
     ['sl_diff','Difficulté de départ',s.diff,1,5,s.diff+' / 5',['facile','difficile'],false],
     ['sl_tick','Vitesse du serpent',s.tick,20,350,s.tick+' ms',['lent','rapide'],true],
-    ['sl_lives','Nombre de vies',s.lives,1,5,String(s.lives),['1','5'],false]];
+    ['sl_lives','Nombre de vies',s.lives,1,5,String(s.lives),['1','5'],false],
+    ['sl_zoom','Zoom de la salle',s.zoom,1,5,['très dézoomé','dézoomé','moyen','zoomé','très zoomé'][s.zoom-1],['voir plus','voir moins'],false]];
   sl.forEach(d=>{drawSlider(c,d[0],x+p+8*u,cy,iw-16*u,sh,d[1],d[2],d[3],d[4],d[5],d[6],d[7]);cy+=sh*1.3+g*0.4;});
   cy+=4*u;
   drawButton(c,'start',x+p,cy,iw,68*u,'Démarrer',{color:'#2f9e5b',size:0.46});cy+=68*u+12*u;
@@ -1770,8 +1771,8 @@ cap.addEventListener('input',()=>{const f=FIELD[S.focus];if(!f)return;S.set[f[0]
 cap.addEventListener('blur',()=>{S.focus=null;});
 function setSlider(e,px){
   let t=clamp((px-e.sx)/e.sw,0,1);if(e.inv)t=1-t;const v=Math.round(e.min+t*(e.max-e.min));
-  const k={sl_chrono:'chrono',sl_diff:'diff',sl_tick:'tick',sl_lives:'lives'}[e.id];
-  if(k&&S.set[k]!==v){S.set[k]=v;saveSettings();}
+  const k={sl_chrono:'chrono',sl_diff:'diff',sl_tick:'tick',sl_lives:'lives',sl_zoom:'zoom'}[e.id];
+  if(k&&S.set[k]!==v){S.set[k]=v;saveSettings();if(k==='zoom')resize();}
 }
 function goMenu(){S.screen='menu1';blurInput();}
 function handleButton(id){
