@@ -14,7 +14,7 @@
   body{display:flex;align-items:center;justify-content:center;background:#dfe7fb}
   #card{position:relative;width:min(1400px,98vw);height:min(96vh,1200px);height:min(96dvh,1200px);background:#fff;border-radius:22px;box-shadow:0 12px 40px rgba(40,60,120,.28);overflow:hidden}
   /* Mobile / tablette portrait et téléphone en paysage : le jeu occupe toute la page */
-  @media (max-width:820px),(max-height:500px){
+  @media (max-width:820px),(max-height:500px),(pointer:coarse){
     html,body{background:#5b7cff}
     #card{width:100vw;height:100vh;height:100dvh;border-radius:0;box-shadow:none}
   }
@@ -81,7 +81,7 @@
   "about":["Maths Snake est un jeu de calcul pour réviser les automatismes : équations, pourcentages, calcul mental, conversions, carrés, commerce.","Conduis ton serpent de cahiers jusqu’à la bonne réponse avant la fin du chrono.","Créé par Tom Rougeaud, professeur de maths-sciences. Licence CC BY-NC 4.0 : usage libre en classe, pas d’usage commercial.","Fichier unique et autonome : fonctionne sans internet, sans compte et sans serveur."],
   "privTitle":"Confidentialité",
   "priv":["Ce jeu ne collecte aucune donnée et n’en envoie aucune : tout reste dans ton navigateur.","Seuls sont enregistrés sur cet appareil (stockage local du navigateur) : tes réglages, ton prénom/classe si tu les saisis, ton meilleur score et l’historique de tes dernières parties (40 au maximum, pour le rapport).","Le rapport HTML est un fichier téléchargé par toi, sur ton appareil : rien n’est envoyé sur internet.","Tu peux exporter, importer ou effacer ces données avec les boutons ci-dessous."],
-  "rules":["Flèches ou Z Q S D (ou glisse le doigt)","Mange le cahier qui porte la bonne réponse","Erreur : −1 vie, serpent plus court et plus rapide","Prof, tables et meubles : le serpent rebondit"]
+  "rules":["Flèches ou Z Q S D (ou glisse le doigt)","Mange le cahier qui porte la bonne réponse","Bonne réponse : le serpent accélère un peu. Erreur : −1 vie, serpent plus court et plus lent","Prof, tables et meubles : le serpent rebondit"]
  }
 }
 </script>
@@ -388,7 +388,7 @@ WHY.speed='Pour passer de km/h à m/s, on divise par 3,6.';
    ========================================================= */
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const cap=document.getElementById('cap');
-let W=800,H=600,DPR=1,CELL=20,COLS=30,ROWS=20,tbRows=2,bdRows=4,r0=6,MOB=false,ROT=false;
+let W=800,H=600,DPR=1,CELL=20,COLS=30,ROWS=20,tbRows=2,bdRows=4,r0=6,MOB=false,ROT=false,TOUCH=false,DW=800,K=1;
 const L={tables:[],furn:[],prof:null,bubble:null,board:null,blk:null,safe:[],students:[],tw:4,th:2,fw:2};
 const DIRS=[{x:1,y:0},{x:0,y:1},{x:-1,y:0},{x:0,y:-1}];
 const sameDir=(a,b)=>a.x===b.x&&a.y===b.y;
@@ -396,14 +396,14 @@ const oppDir=(a,b)=>a.x===-b.x&&a.y===-b.y;
 
 function buildWorld(){
   if(MOB){ // mobile / tablette en portrait : grille plus grosse (cases d’environ 32 px), 2 colonnes de tables
-    COLS=clamp(Math.round(W/32),10,16);CELL=W/COLS;
+    COLS=clamp(Math.round(DW/36),9,14);CELL=W/COLS;
   }else{
     COLS=W>=900?36:(W>=640?30:20);
     CELL=Math.max(10,Math.floor(W/COLS));
   }
   ROWS=Math.max(12,Math.floor(H/CELL));
   tbRows=MOB?2:(CELL>=36?1:Math.ceil(50/CELL));
-  bdRows=MOB?clamp(Math.round((ROWS-tbRows)*0.27),5,8):clamp(Math.round((ROWS-tbRows)*0.25),5,10);
+  bdRows=MOB?clamp(Math.round((ROWS-tbRows)*0.24),ROWS<18?4:5,7):clamp(Math.round((ROWS-tbRows)*0.25),5,10);
   r0=tbRows+bdRows;
   const wide=COLS>=30;
   const fw=MOB?1:(wide?2:1),corr=wide?3:2,gap=3;
@@ -411,24 +411,24 @@ function buildWorld(){
   L.blk=new Uint8Array(COLS*ROWS);
   for(let y=0;y<r0;y++)for(let x=0;x<COLS;x++)L.blk[y*COLS+x]=1;
   // professeur 2×2 sous le tableau (centré ; à gauche sur mobile pour laisser la place à la bulle)
-  L.prof={x:MOB?2:Math.floor(COLS/2)-1,y:r0,w:2,h:2};
+  L.prof={x:MOB?1:Math.floor(COLS/2)-1,y:r0,w:2,h:2};
   // bulle (obstacle dynamique) à droite du prof
-  const bw=MOB?Math.max(4,COLS-6):(wide?6:7);
+  const bw=MOB?Math.max(4,COLS-5):(wide?6:7);
   L.bubble={x:L.prof.x+3,y:r0,w:bw,h:2};
   // tables
   L.tables=[];L.students=[];
   let tRow0,totH,tw,th;
   if(MOB){
-    const innerW=COLS-2,lane=1;
-    tw=clamp(Math.floor((innerW-2*lane-4)/2),2,4); // allée centrale d’au moins 4 cases dès que la largeur le permet
-    const aisle=innerW-2*lane-2*tw;
-    tRow0=r0+3;const rowsAvail=ROWS-1-tRow0,nr=rowsAvail>=10?3:(rowsAvail>=6&&COLS>=11?2:1); // très petit écran : une seule rangée de tables
+    const innerW=COLS-2; // 1 case de marge de chaque côté, plus de meubles : tout pour le terrain
+    tw=clamp(Math.floor((innerW-4)/2),2,3); // allée centrale large (≥ 4 cases) pour les cahiers 2×2
+    const aisle=innerW-2*tw;
+    tRow0=r0+2;const rowsAvail=ROWS-1-tRow0,nr=rowsAvail>=10?3:(rowsAvail>=6?2:1);
     th=clamp(Math.floor((rowsAvail-(nr-1)*2)/nr),2,3);
     const rg=nr>1?clamp(Math.floor((rowsAvail-nr*th)/(nr-1)),2,3):0;
-    const lx=1+lane,rx=lx+tw+aisle;
+    const lx=1,rx=lx+tw+aisle;
     for(let j=0;j<nr;j++)for(let i=0;i<2;i++)L.tables.push({x:i?rx:lx,y:tRow0+j*(th+rg),w:tw,h:th});
     totH=nr*th+(nr-1)*rg;
-    L.furn=[{x:0,y:tRow0,w:1,h:totH,side:'L'},{x:COLS-1,y:tRow0,w:1,h:totH,side:'R'}];
+    L.furn=[];
   }else{
     const innerL=1+fw+corr,innerW=COLS-2-2*fw-2*corr;
     tw=Math.max(2,Math.floor((innerW-2*gap)/3));
@@ -449,7 +449,7 @@ function buildWorld(){
     for(let k=0;k<n;k++)L.students.push({t:ti,k:k,n:n,seed:(ti*7+k*3+1)});
   });
   // tableau : rectangle en pixels
-  L.board=MOB?{x:CELL*0.5,y:tbRows*CELL+CELL*0.25,w:(COLS-1)*CELL,h:bdRows*CELL-CELL*0.35}
+  L.board=MOB?{x:CELL*0.4,y:tbRows*CELL+CELL*0.25,w:(COLS-0.8)*CELL,h:bdRows*CELL-CELL*0.35}
             :{x:2*CELL,y:tbRows*CELL+CELL*0.25,w:(COLS-4)*CELL,h:bdRows*CELL-CELL*0.35};
   computeSafeBlocks();
 }
@@ -598,7 +598,7 @@ function floater(px,py,text,color){R.floats.push({x:px,y:py,text:text,color:colo
 function newRun(){
   const s=S.set,hx=Math.floor(COLS/2),hy=ROWS-1;
   R={snake:[{x:hx,y:hy,c:0},{x:hx-1,y:hy,c:1},{x:hx-2,y:hy,c:2}],cc:3,prev:null,dir:{x:1,y:0},queue:[],answers:[],q:null,
-     score:0,lives:s.lives,maxLives:s.lives,wrongStreak:0,streak:0,bestStreak:0,diff:s.diff,goodCount:0,timeLeft:s.chrono,pen:0,speedMult:1,
+     score:0,lives:s.lives,maxLives:s.lives,wrongStreak:0,streak:0,bestStreak:0,diff:s.diff,goodCount:0,timeLeft:s.chrono,pen:0,spd:1,profT:0,badFlash:0,badN:0,bubbleBad:false,speedMult:1,
      acc:0,t:0,bubbleT:0,log:[],start:new Date(),qStart:0,stuck:0,pend:0,particles:[],floats:[],shake:0,bump:0,
      cheat:{show:0,used:[],buf:''},over:null,qi:0,corr:null,hand:0,pace:0};
   R.prev=R.snake.map(c=>({x:c.x,y:c.y,c:c.c}));
@@ -611,7 +611,7 @@ function nextQuestion(){
   R.timeLeft=S.set.chrono;R.qStart=R.t;R.qi++;
   spawnAnswers(R.q);SFX.pop();
 }
-function tickMsEff(){return clamp((S.set.tick-R.pen)/R.speedMult,20,600);}
+function tickMsEff(){return clamp(S.set.tick/(R.spd*R.speedMult),20,600);}
 
 function pushDir(d){
   if(!R)return;const last=R.queue.length?R.queue[R.queue.length-1]:R.dir;
@@ -623,7 +623,7 @@ function bodyHit(x,y,growing){
   for(let i=0;i<n;i++)if(R.snake[i].x===x&&R.snake[i].y===y)return true;
   return false;
 }
-function cellOK(x,y){return !isSolid(x,y)&&!bubbleOn(x,y)&&!bodyHit(x,y,R.pend>0);}
+function cellOK(x,y){const h0=R.snake[0];return !isSolid(x,y)&&(!bubbleOn(x,y)||bubbleOn(h0.x,h0.y))&&!bodyHit(x,y,R.pend>0);}
 /* espace libre accessible depuis une case (plafonné) : sert au rebond intelligent */
 function spaceFrom(sx,sy,cap){
   const seen=new Set([sx+sy*COLS]),q=[[sx,sy]];
@@ -678,7 +678,7 @@ function pickAnswer(a){
   const q=R.q,sec=Math.max(0,R.t-R.qStart),c=cellPx(a.x+0.5,a.y+0.5);
   if(a.ok){
     logAttempt('bon',a.v,sec);
-    R.score++;R.streak++;R.bestStreak=Math.max(R.bestStreak,R.streak);R.goodCount++;R.wrongStreak=0;if(R.snake.length+R.pend<R.maxLen)R.pend++;R.bubbleT=2;R.hand=2.2;R.corr=null;
+    R.score++;R.streak++;R.bestStreak=Math.max(R.bestStreak,R.streak);R.goodCount++;R.wrongStreak=0;if(R.snake.length+R.pend<R.maxLen)R.pend++;R.bubbleT=2;R.bubbleBad=false;R.hand=2.2;R.corr=null;R.spd=Math.min(2.2,R.spd*1.045);
     SFX.good();emit(c.x,c.y,a.color,26,CELL*9,0.9,CELL*0.22);emit(c.x,c.y,'#ffd43b',14,CELL*6,0.8,CELL*0.18);
     floater(c.x,c.y-CELL,'+1'+(R.streak>=3?'  🔥'+R.streak:''),'#2f9e5b');
     if(R.goodCount%5===0&&R.diff<5){R.diff++;SFX.level();floater(W/2,H*0.5,'Niveau '+R.diff+' !','#6c7bff');}
@@ -687,7 +687,7 @@ function pickAnswer(a){
   }else{
     logAttempt('faux',a.v,sec,a.why);
     SFX.bad();emit(c.x,c.y,'#ff6b6b',22,CELL*8,0.8,CELL*0.2);R.shake=0.45;
-    R.lives--;R.wrongStreak++;R.streak=0;R.pen+=10;
+    R.lives--;R.wrongStreak++;R.streak=0;R.spd=Math.max(0.55,R.spd*0.86);R.profT=1.3;R.badN++;R.bubbleT=1.8;R.bubbleBad=true;R.badFlash=1.6;R.hand=0;
     if(R.snake.length>3&&R.pend===0)R.snake.pop();
     floater(c.x,c.y-CELL,'−1 ❤','#e03131');
     R.corr={q:q,chosen:a.v,why:a.why,t:6};
@@ -745,6 +745,8 @@ function update(dt){
   R.answers.forEach(a=>{a.age+=dt;});
   if(R.bubbleT>0)R.bubbleT-=dt;
   if(R.hand>0)R.hand-=dt;
+  if(R.profT>0)R.profT-=dt;
+  if(R.badFlash>0)R.badFlash-=dt;
   if(R.corr){R.corr.t-=dt;if(R.corr.t<=0)R.corr=null;}
   if(R.cheat.show>0)R.cheat.show-=dt;
   const before=Math.ceil(R.timeLeft);R.timeLeft-=dt;
@@ -906,6 +908,22 @@ function drawStudents(c,time){
 
 /* ---------- Professeur (de face), sa bulle ---------- */
 function drawProf(c,time){
+  if(!R||!(R.profT>0)){drawProfBody(c,time);return;}
+  const u=CELL,P=L.prof,cx=(P.x+1)*u,fy=(P.y+2)*u,p=clamp(1-R.profT/1.3,0,1);
+  const jp=clamp(p/0.5,0,1),jump=Math.sin(Math.PI*jp)*u*1.2;
+  const salto=(R.badN%2===0)?Math.PI*2*(1-Math.pow(1-jp,2)):0;
+  const zoom=1+0.26*Math.sin(Math.PI*clamp(p/0.8,0,1));
+  const sh=p>0.5?Math.sin((p-0.5)*70)*u*0.07*(1-p):0;
+  const cyb=fy-u;
+  c.save();c.translate(cx+sh,cyb-jump);c.rotate(salto);c.scale(zoom,zoom);c.translate(-cx,-cyb);
+  drawProfBody(c,time);c.restore();
+  const a=clamp(R.profT/0.5,0,1);
+  c.save();c.globalAlpha=a;c.fillStyle='#e03131';c.strokeStyle='#fff';c.lineWidth=Math.max(2,u*0.06);
+  const ex=cx+u*1.0,ey=P.y*u-u*0.1-jump*0.5;
+  c.font='900 '+Math.round(u*1.2)+'px ui-rounded,system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';
+  c.strokeText('!',ex,ey);c.fillText('!',ex,ey);c.restore();
+}
+function drawProfBody(c,time){
   const P=L.prof,u=CELL,cx=(P.x+1)*u,top=P.y*u,bob=Math.sin(time*1.6)*u*0.03;
   // ombre
   c.fillStyle='rgba(40,25,10,0.22)';c.beginPath();c.ellipse(cx,top+2*u-u*0.05,u*1.0,u*0.18,0,0,6.283);c.fill();
@@ -939,11 +957,11 @@ function drawBubble(c){
   const x=B.x*CELL,y=B.y*CELL,w=B.w*CELL,h=B.h*CELL;
   c.save();c.globalAlpha=al;c.translate(x,y+h/2);c.scale(s,s);c.translate(-x,-(y+h/2));
   c.fillStyle='rgba(40,30,10,0.18)';rr(c,x+3,y+5,w,h,h*0.35);c.fill();
-  c.fillStyle='#fff';c.strokeStyle='#2b3a67';c.lineWidth=Math.max(2,CELL*0.07);
+  const bad=R.bubbleBad;c.fillStyle=bad?'#fff0f0':'#fff';c.strokeStyle=bad?'#c92a2a':'#2b3a67';c.lineWidth=Math.max(2,CELL*0.07);
   rr(c,x,y,w,h,h*0.35);c.fill();c.stroke();
   c.beginPath();c.moveTo(x+2,y+h*0.45);c.lineTo(x-CELL*0.55,y+h*0.5);c.lineTo(x+2,y+h*0.72);c.closePath();c.fill();
-  c.fillStyle='#fff';c.fillRect(x-1,y+h*0.47,5,h*0.23);
-  c.fillStyle='#2f9e5b';fitText(c,'Bonne réponse !',x+w/2,y+h*0.52,w*0.88,h*0.5,'800');
+  c.fillStyle=bad?'#fff0f0':'#fff';c.fillRect(x-1,y+h*0.47,5,h*0.23);
+  c.fillStyle=bad?'#e03131':'#2f9e5b';fitText(c,bad?'Mauvaise réponse !':'Bonne réponse !',x+w/2,y+h*0.52,w*0.88,h*0.5,'800');
   c.restore();
 }
 function fitText(c,txt,x,y,maxW,maxSize,weight,family){
@@ -967,14 +985,14 @@ function drawBoardText(c,mode){
   c.fillStyle='#ffe066';fitText(c,MOB?ch.label:'Question ('+q.chap+')',B.x+B.w/2,B.y+B.h*(MOB?0.13:0.12),B.w*(MOB?0.56:0.7),B.h*(MOB?0.17:0.16),'700');
   const lines=q.text.split('\n'),areaTop=B.y+B.h*(MOB?0.30:0.23),areaH=B.h*(hasCorr?(MOB?0.38:0.42):(MOB?0.62:0.68));
   const ls=Math.min(areaH/(lines.length*1.15),B.h*0.3);
-  let size=Math.floor(ls);c.fillStyle='#fff';
+  let size=Math.floor(ls);c.fillStyle=(R.badFlash>0)?'#ff5a5a':'#fff';
   // taille commune pour toutes les lignes
   for(let guard=0;guard<40;guard++){c.font='800 '+size+'px ui-rounded,"Segoe UI",system-ui,sans-serif';let m=0;lines.forEach(l=>{m=Math.max(m,c.measureText(l).width);});if(m<=B.w*(MOB?0.9:0.82)-(W>=640&&!MOB?CELL*3.2:0)||size<10)break;size-=2;}
   c.textAlign='center';
   lines.forEach((l,i)=>{c.fillText(l,B.x+B.w/2-(W>=640&&!MOB?CELL*0.5:0),areaTop+areaH*(i+0.5)/lines.length+(lines.length>1?0:0));});
   if(hasCorr){
     const k=R.corr,cy=B.y+B.h*0.78;
-    c.fillStyle='#ffa8a8';
+    c.fillStyle='#ff4d4d';
     const first=k.chosen===null?'Temps écoulé ! La réponse était '+fmt(k.q.ans)+(k.q.unit?' '+k.q.unit:''):'Raté : '+fmt(k.chosen)+' ✘   Bonne réponse : '+fmt(k.q.ans)+(k.q.unit?' '+k.q.unit:'');
     fitText(c,first,B.x+B.w/2,cy-B.h*0.08,B.w*0.88,B.h*0.1,'700');
     c.fillStyle='#fff3bf';const why=(k.why&&WHY[k.why])||k.q.sol||'';
@@ -1066,7 +1084,7 @@ function drawAnswers(c){
     c.strokeStyle='rgba(0,0,0,0.12)';c.lineWidth=1.5;c.stroke();
     c.fillStyle='#212529';
     const hasU=R.q&&R.q.unit;
-    fitText(c,fmt(a.v),-s*0.02,hasU?-s*0.08:0,lw*0.92,s*(hasU?(MOB?0.36:0.3):(MOB?0.44:0.36)),'800');
+    fitText(c,fmt(a.v),-s*0.02,hasU?-s*0.12:0,lw*0.92,s*(hasU?(MOB?0.36:0.3):(MOB?0.44:0.36)),'800');
     if(hasU){c.fillStyle='#495057';fitText(c,R.q.unit,-s*0.02,s*0.14,lw*0.8,s*0.16,'700');}
     c.restore();
   });
@@ -1180,7 +1198,7 @@ function drawHUDMobile(c){
   const hh=tbRows*CELL,pad=Math.max(8,W*0.025),r1=hh*0.27,r2=hh*0.745;
   c.save();drawBarBg(c,hh);
   const lg=hh*0.46;drawLogo(c,pad,r1-lg/2,lg);
-  const wf=Math.min(hh*0.34,30);c.font='800 '+wf+'px '+FONT;c.textAlign='left';c.textBaseline='middle';
+  const wf=Math.min(hh*0.34,30*K);c.font='800 '+wf+'px '+FONT;c.textAlign='left';c.textBaseline='middle';
   const t1='Maths ',w1=c.measureText(t1).width,wx=pad+lg+8;
   c.shadowColor='rgba(30,20,90,0.4)';c.shadowBlur=5;c.shadowOffsetY=2;c.fillStyle='#fff';c.fillText(t1,wx,r1+1);c.fillStyle='#ffe066';c.fillText('Snake',wx+w1,r1+1);
   c.shadowColor='transparent';c.shadowBlur=0;c.shadowOffsetY=0;
@@ -1198,9 +1216,9 @@ function drawHUDMobile(c){
   // puces d’information (rangée du bas)
   const s=S.set,hearts=R.maxLives;
   let chips=[{k:'Score',v:String(R.score),col:'#e8590c'},{k:'Niv.',v:R.diff+'/5',col:'#7048e8'},{k:'Temps',v:Math.ceil(R.timeLeft)+' s',col:R.timeLeft<=5?'#e03131':'#2b8a3e'},{hearts:true},{k:'Faux',v:R.wrongStreak+'/3',col:'#c2255c',opt:1}];
-  const tp=Math.max(8,CELL*0.3),avail=W-2*pad-2*tp;let fs=clamp(CELL*0.5,13,22),total=0;
+  const tp=Math.max(8,CELL*0.3),avail=W-2*pad-2*tp;let fs=clamp(CELL*0.5,13*K,22*K),total=0;
   const measure=f=>{let t=0;chips.forEach((ch,i)=>{let w=0;if(ch.hearts)w=hearts*f*1.1;else{c.font='600 '+(f*0.8)+'px '+FONT;w=c.measureText(ch.k+' ').width;c.font='800 '+f+'px '+FONT;w+=c.measureText(ch.v).width;}t+=w+(i?f*1.1:0);});return t;};
-  for(let g=0;g<40;g++){total=measure(fs);if(total<=avail)break;if(fs>12)fs-=0.5;else if(chips.some(x=>x.opt))chips=chips.filter(x=>!x.opt);else break;}
+  for(let g=0;g<40;g++){total=measure(fs);if(total<=avail)break;if(fs>12*K)fs-=0.5;else if(chips.some(x=>x.opt))chips=chips.filter(x=>!x.opt);else break;}
   const th=Math.min(hh*0.44,fs*2.1);let x=(W-total)/2;
   c.fillStyle='rgba(255,255,255,0.96)';rr(c,x-tp,r2-th/2,total+2*tp,th,th/2);c.fill();
   chips.forEach((ch,i)=>{
@@ -1215,11 +1233,11 @@ function drawHUDMobile(c){
 function drawTopBarLiteM(c){
   const hh=tbRows*CELL,pad=Math.max(8,W*0.03),lg=hh*0.82;
   c.save();drawBarBg(c,hh);drawLogo(c,pad,hh/2-lg/2,lg);
-  const wx=pad+lg+12,wf=Math.min(hh*0.4,34);
+  const wx=pad+lg+12,wf=Math.min(hh*0.4,34*K);
   c.font='800 '+wf+'px '+FONT;c.textAlign='left';c.textBaseline='middle';const w1=c.measureText('Maths ').width;
   c.shadowColor='rgba(30,20,90,0.4)';c.shadowBlur=6;c.shadowOffsetY=2;c.fillStyle='#fff';c.fillText('Maths ',wx,hh*0.38);c.fillStyle='#ffe066';c.fillText('Snake',wx+w1,hh*0.38);
   c.shadowColor='transparent';c.shadowBlur=0;c.shadowOffsetY=0;
-  const lf=Math.min(hh*0.19,15),lt='//Tom Rougeaud';c.font='600 '+lf+'px system-ui,sans-serif';const lw=c.measureText(lt).width;
+  const lf=Math.min(hh*0.19,15*K),lt='//Tom Rougeaud';c.font='600 '+lf+'px system-ui,sans-serif';const lw=c.measureText(lt).width;
   c.fillStyle=S.hover==='link'?'#fff':'rgba(255,255,255,0.85)';c.fillText(lt,wx+2,hh*0.78);
   addUI({id:'link',type:'link',x:wx-4,y:hh*0.78-lf*1.4,w:lw+12,h:lf*2.8});
   c.restore();
@@ -1254,7 +1272,7 @@ function clearUI(){ui=[];}
 function addUI(e){ui.push(e);}
 function hitTest(px,py){for(let i=ui.length-1;i>=0;i--){const e=ui[i];if(px>=e.x&&px<=e.x+e.w&&py>=e.y&&py<=e.y+e.h)return e;}return null;}
 const FONT='ui-rounded,"Nunito","Segoe UI",system-ui,sans-serif';
-const fu=()=>MOB?15:clamp(Math.min(W,H)/40,11,19);
+const fu=()=>MOB?15*K:clamp(Math.min(W,H)/40,11,19);
 
 function drawCard(c,x,y,w,h,alpha){
   c.save();c.fillStyle='rgba(40,50,100,0.25)';rr(c,x+3,y+8,w,h,24);c.fill();
@@ -1274,7 +1292,8 @@ function drawButton(c,id,x,y,w,h,label,o){
   if(!dis)addUI({id:id,type:'button',x:x,y:y-4,w:w,h:h+8});
 }
 function drawSlider(c,id,x,y,w,h,label,val,min,max,valText,hint,inv){
-  const f=h*0.34;c.save();c.textBaseline='middle';c.textAlign='left';
+  let f=h*0.34;c.save();c.textBaseline='middle';c.textAlign='left';
+  for(let g=0;g<20&&f>8;g++){c.font='800 '+f+'px '+FONT;if(c.measureText(label).width+c.measureText(valText).width+f*1.2<=w)break;f-=1;}
   c.font='800 '+f+'px '+FONT;c.fillStyle='#3b4272';c.fillText(label,x,y+h*0.2);
   c.textAlign='right';c.fillStyle='#e8590c';c.fillText(valText,x+w,y+h*0.2);
   const ty=y+h*0.68,tr=h*0.12,t=clamp((val-min)/(max-min),0,1),k=inv?1-t:t;
@@ -1469,7 +1488,7 @@ function drawError(c){
    Cartes pleine largeur, boutons hauts (≥ 50 px) et textes plus gros.
    Les tailles sont calculées avec un facteur u adapté à l’écran.
    ========================================================= */
-function mU(h,need){return clamp(Math.min(W/390,h/need),0.72,1.3);}
+function mU(h,need){return clamp(Math.min(W/390,h/need),0.72,1.3*K);}
 function mCard(c,full){
   const m=Math.max(6,W*0.022),hh=tbRows*CELL,x=m,y=full?m:hh+m,w=W-2*m,h=H-y-m;
   drawCard(c,x,y,w,h,1);return{x:x,y:y,w:w,h:h,p:Math.max(12,w*0.05)};
@@ -1485,7 +1504,7 @@ function parasHeight(c,paras,w,size,gap){c.font='600 '+size+'px '+FONT;let y=0;p
 /* ---------- Plein écran ---------- */
 function drawFSM(c){
   drawWorld(c,false);veil(c,0.35);
-  const m=Math.max(10,W*0.04),w=W-2*m,h=Math.min(H*0.72,470),u=mU(h,440),x=m,y=(H-h)/2;drawCard(c,x,y,w,h);
+  const m=Math.max(10,W*0.04),w=W-2*m,h=Math.min(H*0.72,470*K),u=mU(h,440),x=m,y=(H-h)/2;drawCard(c,x,y,w,h);
   c.fillStyle='#3b4272';c.textBaseline='middle';fitText(c,'Plein écran',W/2,y+44*u,w*0.84,34*u,'800');
   c.fillStyle='#5c6590';c.font='600 '+(17*u)+'px '+FONT;c.textAlign='left';
   let ty=y+84*u;
@@ -1542,7 +1561,7 @@ function drawMenu2M(c){
 /* ---------- Pause ---------- */
 function drawPauseM(c){
   drawWorld(c,true);veil(c,0.45);
-  const hh=tbRows*CELL,m=Math.max(10,W*0.04),w=W-2*m,h=Math.min(H-hh-2*m,520),u=mU(h,470),x=m,y=hh+(H-hh-h)/2;drawCard(c,x,y,w,h);
+  const hh=tbRows*CELL,m=Math.max(10,W*0.04),w=W-2*m,h=Math.min(H-hh-2*m,520*K),u=mU(h,470),x=m,y=hh+(H-hh-h)/2;drawCard(c,x,y,w,h);
   mTitle(c,'Pause',{x:x,y:y,w:w,h:h},y+44*u,u);
   const bw=w-2*m,bx=x+m,bh=58*u,gp=12*u;let cy=y+84*u;
   drawButton(c,'resume',bx,cy,bw,bh*1.1,'Reprendre',{color:'#2f9e5b',size:0.46});cy+=bh*1.1+gp;
@@ -1840,7 +1859,13 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&S.screen==
 function resize(){
   const r=cv.getBoundingClientRect();DPR=clamp(window.devicePixelRatio||1,1,3);
   W=Math.max(320,r.width);H=Math.max(300,r.height);
-  ROT=H<500&&W>H*1.15;MOB=!ROT&&W<820&&H>=W*0.95; // ROT : téléphone en paysage ; MOB : mobile / tablette en portrait
+  // Tactile ? (le mode « version ordinateur » du navigateur gonfle W : on se base sur la taille physique de l’écran)
+  let coarse=false;try{coarse=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches);}catch(e){}
+  const sw=Math.min(screen.width||W,screen.height||H);
+  TOUCH=coarse||(('ontouchstart' in window||navigator.maxTouchPoints>0)&&sw<=900);
+  DW=TOUCH?Math.min(sw,W):W;K=TOUCH?Math.max(1,W/DW):1;
+  const small=TOUCH?DW<=900:W<820;
+  ROT=small&&W>H*1.15&&H/K<500;MOB=small&&!ROT&&H>=W*0.95; // ROT : téléphone en paysage ; MOB : mobile / tablette en portrait
   cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
   const oc=COLS,or=ROWS;buildWorld();buildBg();
   if(R&&!R.over&&(oc!==COLS||or!==ROWS)){relayoutRun();if(S.screen==='play')S.screen='pause';}
