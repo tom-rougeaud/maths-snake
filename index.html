@@ -1249,7 +1249,7 @@ function drawTopBarLiteM(c){
   const lf=Math.min(hh*0.19,15*K),lt='//Tom Rougeaud';c.font='600 '+lf+'px system-ui,sans-serif';const lw=c.measureText(lt).width;
   c.fillStyle=S.hover==='link'?'#fff':'rgba(255,255,255,0.85)';c.fillText(lt,wx+2,hh*0.78);
   addUI({id:'link',type:'link',x:wx-4,y:hh*0.78-lf*1.4,w:lw+12,h:lf*2.8});
-  c.restore();drawInstallPill(c,hh,pad,hh*0.7);
+  c.restore();
 }
 
 /* ---------- Composition d’une image complète ---------- */
@@ -1555,7 +1555,7 @@ function drawFSM(c){
 /* ---------- Page 1 : C’est parti ! ---------- */
 function drawMenu1M(c){
   drawWorld(c,false);veil(c,0.12);
-  const k=mCard(c),x=k.x,y=k.y,w=k.w,h=k.h,p=k.p,iw=w-2*p,need=560,u=mU(h,need),g=Math.min(Math.max(0,h-need*u)/6,34*u);
+  const k=mCard(c),x=k.x,y=k.y,w=k.w,h=k.h,p=k.p,iw=w-2*p,inst=installBtnWanted(),need=inst?640:560,u=mU(h,need),g=Math.min(Math.max(0,h-need*u)/6,34*u);
   let cy=y+10*u+g*0.5;
   mTitle(c,'C’est parti !',k,cy+22*u,u);cy+=52*u+g;
   const ih=68*u;
@@ -1572,6 +1572,7 @@ function drawMenu1M(c){
   });
   cy+=4*(bh+gp)+g;
   drawButton(c,'next',x+p,cy,iw,66*u,'SUIVANT  ›',{color:'#ff7a59',size:0.46});
+  if(inst)drawButton(c,'inst_btn',x+p,cy+66*u+12*u,iw,52*u,'📲  Installer l’application',{color:'#f2b705',text:'#4a3b00',size:0.38});
   const fy=y+h-24*u;
   mLink(c,'about','À propos',x+p,fy,15*u,'left');mLink(c,'priv','Confidentialité',x+w/2,fy,15*u,'center');
   mLink(c,'mute',SFX.isMuted()?'Son : coupé':'Son : activé',x+w-p,fy,15*u,'right');
