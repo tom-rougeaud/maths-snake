@@ -1249,7 +1249,7 @@ function drawTopBarLiteM(c){
   const lf=Math.min(hh*0.19,15*K),lt='//Tom Rougeaud';c.font='600 '+lf+'px system-ui,sans-serif';const lw=c.measureText(lt).width;
   c.fillStyle=S.hover==='link'?'#fff':'rgba(255,255,255,0.85)';c.fillText(lt,wx+2,hh*0.78);
   addUI({id:'link',type:'link',x:wx-4,y:hh*0.78-lf*1.4,w:lw+12,h:lf*2.8});
-  c.restore();
+  c.restore();drawInstallPill(c,hh,pad,hh*0.7);
 }
 
 /* ---------- Composition d’une image complète ---------- */
@@ -1546,7 +1546,7 @@ function drawFSM(c){
   c.fillStyle='#3b4272';c.textBaseline='middle';fitText(c,'Plein écran',W/2,y+44*u,w*0.84,34*u,'800');
   c.fillStyle='#5c6590';c.font='600 '+(17*u)+'px '+FONT;c.textAlign='left';
   let ty=y+84*u;
-  ['Pour jouer sur tout l’écran et en paysage, active le plein écran.','Sur iPhone : touche « Partager », puis « Sur l’écran d’accueil » pour jouer sans barre du navigateur.'].forEach(t=>{wrapLines(c,t,w-2*m).forEach(l=>{c.fillText(l,x+m,ty);ty+=22*u;});ty+=8*u;});
+  ['Pour jouer sur tout l’écran, active le plein écran.','Sur iPhone : touche « Partager », puis « Sur l’écran d’accueil » pour jouer sans barre du navigateur.'].forEach(t=>{wrapLines(c,t,w-2*m).forEach(l=>{c.fillText(l,x+m,ty);ty+=22*u;});ty+=8*u;});
   const bh=62*u;
   drawButton(c,'fs_on',x+m,y+h-m-bh*2-12*u,w-2*m,bh,'Activer le plein écran',{color:'#2f9e5b',size:0.4});
   drawButton(c,'fs_skip',x+m,y+h-m-bh,w-2*m,bh,'Continuer sans',{color:'#6b7390',size:0.42});
@@ -1683,21 +1683,15 @@ function drawTextPageM(c,title,paras,priv){
     drawButton(c,'dataClear',x+p+2*(bw+gp),by,bw,bh,S.confirmClear>0?'Confirmer ?':'Effacer',{color:'#e03131',size:0.34});}
 }
 
-/* ---------- Téléphone en paysage : menus dans une colonne centrale qui défile ---------- */
-const LM_SCREENS=['fs','menu1','menu2','rep','end','about','priv'];
-let lmLast='';
-function drawLandMenu(c,fn){
-  drawWorld(c,false);veil(c,0.25);
-  const W0=W,H0=H,M0=MOB,C0=CELL,T0=tbRows,hh=T0*C0,text=(S.screen==='about'||S.screen==='priv'||S.screen==='fs'),k=0.78;
-  if(lmLast!==S.screen){lmLast=S.screen;S.ly=0;}
-  const visH=H0-hh,Wv=Math.min(W0*0.72/k,540),Hv=text?visH/k:780;
-  LMAX=text?0:Math.max(0,Hv-visH/k);S.ly=clamp(S.ly||0,0,LMAX);
-  LV=true;W=Wv;H=Hv;MOB=true;CELL=Wv/12;tbRows=0;
-  const ox=(W0-Wv*k)/2,oy=hh-(text?0:S.ly*k);UIO={x:ox,y:oy,s:k,top:hh,bot:H0};
-  c.save();c.beginPath();c.rect(0,hh,W0,visH);c.clip();c.translate(ox,oy);c.scale(k,k);
-  try{fn(c);
-    if(LMAX>0){const th=visH/k*visH/k/Hv;c.fillStyle='rgba(255,255,255,0.85)';rr(c,Wv-4,S.ly+(visH/k-th)*(S.ly/LMAX),4,th,2);c.fill();}
-  }finally{c.restore();W=W0;H=H0;MOB=M0;CELL=C0;tbRows=T0;LV=false;UIO=null;}
+/* ---------- Téléphone en paysage : on demande de tourner l’écran (le jeu se joue en portrait) ---------- */
+function drawRotate(c){
+  const g=c.createLinearGradient(0,0,W,H);g.addColorStop(0,'#5b7cff');g.addColorStop(0.5,'#a35bff');g.addColorStop(1,'#ff6f91');
+  c.fillStyle=g;c.fillRect(0,0,W,H);
+  const lg=Math.min(H*0.5,150);drawLogo(c,W*0.5-lg*1.9,H*0.5-lg/2,lg);
+  c.fillStyle='#fff';c.textBaseline='middle';c.textAlign='left';
+  const f=Math.min(H*0.1,38),tx=W*0.5-lg*0.75;c.font='800 '+f+'px '+FONT;c.fillText('Tourne ton téléphone',tx,H*0.4);
+  c.font='600 '+(f*0.6)+'px '+FONT;c.fillText('Maths Snake se joue en mode portrait.',tx,H*0.4+f*1.1);
+  c.save();c.translate(tx+f*1.2,H*0.4+f*2.6);c.rotate(Math.sin(S.t*2)*0.35);c.strokeStyle='#fff';c.lineWidth=3;rr(c,-f*0.35,-f*0.6,f*0.7,f*1.2,6);c.stroke();c.restore();
 }
 
 /* =========================================================
@@ -1803,6 +1797,32 @@ function askInstall(){
   if(!deferredInstall)return;
   try{const d=deferredInstall;deferredInstall=null;d.prompt();d.userChoice.then(r=>{if(!r||r.outcome!=='accepted')store.set('inst_no',Date.now());}).catch(()=>{});}catch(e){}
 }
+function installBtnWanted(){return TOUCH&&!isStandalone()&&!installedNow;}
+function drawInstallPill(c,hh,pad,cy){cy=cy||hh/2; // bouton « Installer » dans l’en-tête des menus (mobile)
+  if(!installBtnWanted())return;
+  const f=Math.max(12,Math.min(15,hh*0.26)),lab='📲 Installer';
+  c.save();c.font='800 '+f+'px '+FONT;const w=c.measureText(lab).width+f*1.4,h=Math.min(hh*0.46,f*2.1),x=W-pad-w,y=cy-h/2,on=S.hover==='inst_btn';
+  c.fillStyle=on?'#fff':'#ffe066';rr(c,x,y,w,h,h/2);c.fill();c.strokeStyle='rgba(255,255,255,0.9)';c.lineWidth=2;c.stroke();
+  c.fillStyle='#4a3b00';c.textAlign='center';c.textBaseline='middle';c.fillText(lab,x+w/2,y+h/2+1);c.restore();
+  addUI({id:'inst_btn',type:'button',x:x-6,y:y-6,w:w+12,h:h+12});
+}
+function drawInstallHelp(c){ // aide : comment ajouter le jeu à l’écran d’accueil
+  addUI({id:'inst_help_ok',type:'button',x:0,y:0,w:W,h:H});
+  c.fillStyle='rgba(30,40,90,0.6)';c.fillRect(0,0,W,H);
+  const m=Math.max(12,W*0.05),w=W-2*m,u=clamp(W/390,0.8,1.4);
+  const steps=isIOS?['Touche le bouton Partager ⬆ (barre de Safari).','Choisis « Sur l’écran d’accueil ».','Touche « Ajouter » : le jeu devient une appli.']
+    :['Ouvre le menu ⋮ du navigateur (en haut à droite).','Touche « Installer l’application » ou « Ajouter à l’écran d’accueil ».','Confirme : le jeu devient une appli, en plein écran.'];
+  const tip=isIOS?'':'Si tu vois une croix ✕ en haut (onglet intégré), touche ⋮ puis « Ouvrir dans Chrome » avant d’installer.';
+  c.font='600 '+(17*u)+'px '+FONT;
+  let lines=[];steps.forEach((t,i)=>{wrapLines(c,(i+1)+'.  '+t,w-2*m).forEach(l=>lines.push([l,0]));});
+  if(tip){c.font='600 '+(15*u)+'px '+FONT;wrapLines(c,tip,w-2*m).forEach(l=>lines.push([l,1]));}
+  const lh=24*u,h=Math.min(H-2*m,90*u+lines.length*lh+90*u),x=m,y=(H-h)/2;
+  drawCard(c,x,y,w,h,1);
+  c.fillStyle='#3b4272';c.textBaseline='middle';fitText(c,'📲 Installer le jeu',x+w/2,y+44*u,w*0.84,30*u,'800');
+  c.textAlign='left';let ty=y+86*u;
+  lines.forEach(l=>{c.font=(l[1]?'600 '+(15*u):'600 '+(17*u))+'px '+FONT;c.fillStyle=l[1]?'#e8590c':'#5c6590';c.fillText(l[0],x+m,ty);ty+=lh;});
+  drawButton(c,'inst_help_ok',x+m,y+h-m-56*u,w-2*m,56*u,'OK, compris',{color:'#2f9e5b',size:0.42});
+}
 function drawInstall(c){
   if(!installWanted())return;
   const w=Math.min(W-16,540),h=isIOS&&!deferredInstall?84:66,x=(W-w)/2,y=H-h-8;
@@ -1823,7 +1843,7 @@ function drawInstall(c){
   c.restore();
 }
 function tryFullscreen(){
-  try{const el=document.getElementById('card'),f=el.requestFullscreen||el.webkitRequestFullscreen;if(f){const r=f.call(el);if(r&&r.then)r.then(()=>{if(TOUCH){try{const o=screen.orientation&&screen.orientation.lock('landscape');if(o&&o.catch)o.catch(()=>{});}catch(e){}}}).catch(()=>{});}}catch(e){}
+  try{const el=document.getElementById('card'),f=el.requestFullscreen||el.webkitRequestFullscreen;if(f){const r=f.call(el);if(r&&r.then)r.catch(()=>{});}}catch(e){}
 }
 
 /* =========================================================
@@ -1853,6 +1873,8 @@ function handleButton(id){
   switch(id){
     case'full':tryFullscreen();break;
     case'inst_ok':askInstall();break;
+    case'inst_btn':if(deferredInstall)askInstall();else S.instHelp=true;break;
+    case'inst_help_ok':S.instHelp=false;break;
     case'inst_no':store.set('inst_no',Date.now());break;
     case'fs_on':tryFullscreen();S.screen='menu1';break;
     case'fs_skip':S.screen='menu1';break;
@@ -1877,7 +1899,7 @@ function handleButton(id){
     case'link':try{window.open(LINKEDIN,'_blank','noopener');}catch(e){}break;
   }
 }
-let swipe=null,drag=null,scr=null,lscr=null,lastTap=0;
+let swipe=null,drag=null,scr=null,lastTap=0;
 function ptr(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)};}
 cv.addEventListener('pointerdown',e=>{
   const p=ptr(e),h=hitTest(p.x,p.y);
@@ -1891,12 +1913,10 @@ cv.addEventListener('pointerdown',e=>{
   if(S.focus)blurInput();
   if(S.screen==='play')swipe={x:p.x,y:p.y,t:performance.now(),moved:false,touch:e.pointerType!=='mouse'};
   else if(S.screen==='about'||S.screen==='priv')scr={y:p.y,s:S.scrollY||0};
-  else if(ROT&&LM_SCREENS.indexOf(S.screen)>=0)lscr={y:p.y,s:S.ly||0};
 });
 cv.addEventListener('pointermove',e=>{
   const p=ptr(e);
   if(drag){setSlider(drag,p.x);return;}
-  if(lscr){S.ly=clamp(lscr.s-(p.y-lscr.y)/0.78,0,LMAX);return;}
   if(scr){S.scrollY=clamp(scr.s-(p.y-scr.y),0,S.scrollMax||0);return;}
   const h=hitTest(p.x,p.y);S.hover=h?h.id:null;cv.style.cursor=h?(h.type==='input'?'text':'pointer'):'default';
   if(swipe&&S.screen==='play'){const dx=p.x-swipe.x,dy=p.y-swipe.y;
@@ -1914,8 +1934,8 @@ function endPtr(e){
     const now=performance.now();
     if(now-swipe.t<300){if(now-lastTap<400){lastTap=0;S.screen='pause';SFX.click();}else lastTap=now;}
   }}catch(_){}
-  drag=null;swipe=null;scr=null;lscr=null;}
-cv.addEventListener('wheel',e=>{if(ROT&&S.screen!=='about'&&S.screen!=='priv'&&LM_SCREENS.indexOf(S.screen)>=0){e.preventDefault();S.ly=clamp((S.ly||0)+e.deltaY/0.78,0,LMAX);return;}if(S.screen==='about'||S.screen==='priv'){e.preventDefault();S.scrollY=clamp((S.scrollY||0)+e.deltaY,0,S.scrollMax||0);}},{passive:false});
+  drag=null;swipe=null;scr=null;}
+cv.addEventListener('wheel',e=>{if(S.screen==='about'||S.screen==='priv'){e.preventDefault();S.scrollY=clamp((S.scrollY||0)+e.deltaY,0,S.scrollMax||0);}},{passive:false});
 cv.addEventListener('pointerup',endPtr);cv.addEventListener('pointercancel',endPtr);
 cv.addEventListener('pointerleave',()=>{S.hover=null;});
 
@@ -1965,10 +1985,7 @@ function resize(){
 }
 function render(){
   const c=ctx;c.setTransform(RS,0,0,RS,0,0);c.clearRect(0,0,W,H);clearUI();
-  if(ROT&&LM_SCREENS.indexOf(S.screen)>=0){
-    const f={fs:drawFS,menu1:drawMenu1,menu2:drawMenu2,rep:drawRep,end:drawEnd,about:c2=>drawTextPage(c2,TXT.aboutTitle,TXT.about,false),priv:c2=>drawTextPage(c2,TXT.privTitle,TXT.priv,true)}[S.screen];
-    drawLandMenu(c,f);drawInstall(c);return;
-  }
+  if(ROT){if(S.screen==='play')S.screen='pause';drawRotate(c);return;}
   const sc=S.screen;
   if(sc==='play'||sc==='pause'){
     if(sc==='play'){
@@ -1986,6 +2003,7 @@ function render(){
   else if(sc==='error')drawError(c);
   else drawFS(c);
   drawInstall(c);
+  if(S.instHelp)drawInstallHelp(c);
   if(S.msgT>0){const t=S.msg,f=fu()*1.1;c.save();c.font='800 '+f+'px '+FONT;const w=c.measureText(t).width+f*2;c.globalAlpha=clamp(S.msgT,0,1);
     c.fillStyle='#212529';rr(c,W/2-w/2,H-f*3.2,w,f*2,f);c.fill();c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';c.fillText(t,W/2,H-f*2.2);c.restore();}
 }
